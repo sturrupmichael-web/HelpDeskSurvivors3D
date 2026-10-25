@@ -9,9 +9,11 @@ import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
 import { spawnEnemy, damageEnemy } from '../src/sim/enemies.js';
 import { ENEMIES } from '../data/enemies.js';
 import { Meta, memoryStore, upgradeSave } from '../src/sim/meta.js';
-import { POLICY_ORDER } from '../data/policies.js';
+import { POLICY_ORDER, POLICIES } from '../data/policies.js';
+import { combinePolicies, modsString } from '../src/sim/policies.js';
 import { MAP_ORDER } from '../data/maps.js';
 import { dropTicket } from '../src/sim/pickups.js';
+import { readFileSync } from 'node:fs';
 
 const STEP = 1 / 60;
 const run = (sim, seconds, axis) => {
@@ -781,5 +783,17 @@ tests.push(
     assert(sim.over?.training, `training didn't finish (step ${sim.tutorial.step})`);
     assert(sim.meta.data.trained && sim.meta.data.shifts === 0, 'training counted as a shift');
     assert(cards.filter(Boolean).length === 5 && cards[cards.length - 1] === null, `${cards.length} coach cards`);
+  }],
+  ['the leaderboard accepts every map, and a shift\'s policies fit its checks', () => {
+    // supabase/001_3d.sql refuses unknown maps: its list must match data/maps.js.
+    const sql = readFileSync(new URL('../supabase/001_3d.sql', import.meta.url), 'utf8');
+    const list = sql.match(/map in \(([^)]*)\)/)[1].match(/'([a-z]+)'/g).map((q) => q.slice(1, -1));
+    assert(list.join() === MAP_ORDER.join(), `SQL maps ${list} vs ${MAP_ORDER}`);
+    // The most a shift can be multiplied by is x6 (Hardcore), and mods are letters and commas.
+    const sim = new Sim({}, new Meta());
+    sim.meta.data.mapsWon = [...MAP_ORDER];
+    sim.newRun(undefined, undefined, combinePolicies(POLICY_ORDER.filter((id) => POLICIES[id].group === 'bad').slice(0, 3), true, true));
+    assert(sim.policy.mult <= 6 && sim.policy.mult >= 0.5, `x${sim.policy.mult}`);
+    assert(/^[A-Za-z,]*$/.test(modsString(sim.policy)), modsString(sim.policy));
   }],
 );

@@ -1,10 +1,11 @@
 // The end-of-shift summary: BURNOUT (or CLOCKED OUT), the run's stats and records, the
 // Overtime Pay earned, what a map win unlocked, the shift's policies and score, damage by
 // tool and the passives taken, the shift timeline and the HR performance review, then Next
-// Shift, Change Tech, the shop or the title. At the end of the training shift it shows the
+// Shift, Change Tech, the shop or the title, and the row that posts the shift to the online
+// leaderboard (src/ui/online.js). At the end of the training shift it shows the
 // "you're ready" screen instead (the original's trainingDone).
 // Ported from the original's src/ui/screens/gameOver.js and training.js. Not yet ported:
-// the Knowledge Base and posting to the leaderboard (M13).
+// the Knowledge Base.
 
 import { icon } from './icons.js';
 import { fmtTime } from './hud.js';
@@ -17,6 +18,7 @@ import { PASSIVES } from '../../data/passives.js';
 import { MAPS } from '../../data/maps.js';
 import { POLICIES } from '../../data/policies.js';
 import { fmtMult } from '../sim/policies.js';
+import { boardPost } from './online.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
 const READY_DELAY = 600; // ms: don't let a held key skip the summary
@@ -42,9 +44,12 @@ function reviewCard(s) {
 
 export class GameOverScreen {
   // `onAct(act)`: 'again' (the next shift), 'switch' (change tech), 'shop' or 'title'; after
-  // training, 'clockin' (the Clock In picker) or 'title'.
-  constructor(root, onAct) {
+  // training, 'clockin' (the Clock In picker) or 'title'. `meta` is the save (for the
+  // leaderboard name).
+  constructor(root, onAct, meta) {
     this.onAct = onAct;
+    this.meta = meta;
+    this.post = null; // posts the shift to the leaderboard (P)
     this.el = document.createElement('div');
     this.el.className = 'screen';
     this.el.hidden = true;
@@ -121,6 +126,11 @@ export class GameOverScreen {
         </div>
         ${timelineChart(s.timeline)}
         ${reviewCard(s)}
+        ${
+          s.cheated
+            ? '<p class="board-note">Playtest helpers were used this shift, so it can\'t go on the leaderboard.</p>'
+            : '<div class="board-post"></div>'
+        }
         <div class="summary-buttons">
           <button class="primary" data-act="again">Next Shift <kbd>Enter</kbd></button>
           <button data-act="switch">Change Tech or Map <kbd>C</kbd></button>
@@ -132,6 +142,8 @@ export class GameOverScreen {
     this.training = false;
     this.el.querySelector('.panel').scrollTop = 0;
     this.readyAt = performance.now() + READY_DELAY;
+    const row = this.el.querySelector('.board-post');
+    this.post = row ? boardPost(row, s, this.meta) : null;
     wireTimeline(this.el, s.timeline);
     wireItems(this.el, items);
   }
@@ -155,6 +167,7 @@ export class GameOverScreen {
       </div>`;
     this.el.hidden = false;
     this.training = true;
+    this.post = null;
     this.readyAt = performance.now() + READY_DELAY;
   }
 
@@ -174,6 +187,7 @@ export class GameOverScreen {
     else if (this.training && code !== 'Escape' && code !== 'PadB') return true;
     else if (code === 'KeyC') this.go('switch');
     else if (code === 'KeyS') this.go('shop');
+    else if (code === 'KeyP' && performance.now() >= this.readyAt) this.post?.(); // not a held pause key
     else if (code === 'Escape' || code === 'PadB') this.go('title');
     return true;
   }

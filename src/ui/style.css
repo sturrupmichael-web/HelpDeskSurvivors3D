@@ -483,3 +483,67 @@ kbd {
   .panel button.card.policy .char-status:has(.hint:only-child) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .hud-coach.show { animation: none; } }
+
+/* Online: the leaderboard, Account, profiles and the post row (src/ui/online.js). Layout
+   from the original's: one swipeable row of maps, two filter switches, three columns. */
+.panel input[type=text] { -webkit-user-select: text; user-select: text; font: inherit; font-size: 15px; font-weight: 600; padding: 8px 10px; color: var(--paper); background: var(--ink); border: 2px solid var(--slate); border-radius: 8px; min-height: 40px; }
+.panel input[type=text]:focus { outline: none; border-color: var(--yellow); }
+.panel.board { width: min(680px, calc(100vw - 32px)); }
+.board-maps { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 4px; scrollbar-width: thin; }
+.panel .board-maps button.tab { flex: 0 0 auto; white-space: nowrap; min-height: 40px; font-size: 13px; }
+.panel button.tab.selected { background: var(--polo); border-color: var(--yellow); color: var(--yellow); }
+@media (min-width: 700px) { .board-maps { flex-wrap: wrap; justify-content: center; overflow: visible; } }
+.board-filters { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.panel button.board-clean { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 6px 10px; font-size: 13px; background: transparent; border: none; color: var(--grey); min-height: 40px; }
+.panel button.board-clean:hover { color: var(--paper); }
+.board-clean .switch { width: 30px; height: 16px; border-radius: 8px; border: 2px solid var(--grey); position: relative; flex: none; }
+.board-clean .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--grey); }
+.board-clean.on { color: var(--yellow); }
+.board-clean.on .switch { border-color: var(--yellow); }
+.board-clean.on .switch::after { left: auto; right: 2px; background: var(--yellow); }
+.board-body { min-height: 120px; }
+.board-msg { color: var(--grey); font-size: 13px; }
+.board-note { color: var(--grey); font-size: 13px; text-align: center; margin: 14px 0 0; }
+.board-table { width: 100%; margin: 0 auto; }
+.board-table tr.head td { color: var(--grey); border-bottom: 1px dashed var(--slate); }
+.board-table td { color: var(--paper); text-align: left; }
+.board-table td.rank, .board-table td.score { text-align: right; color: var(--yellow); white-space: nowrap; }
+.board-table td.rank { width: 2.5em; }
+.board-table td.player { white-space: normal; word-break: break-word; }
+.board-table td.player small, .board-table td.score small { display: block; font-size: 12px; color: var(--grey); margin-top: 2px; }
+.board-table td.score { font-variant-numeric: tabular-nums; }
+.board-table .you { font-size: 11px; letter-spacing: 1px; color: var(--ink); background: var(--yellow); padding: 0 4px; border-radius: 3px; margin-left: 4px; }
+.board-table tr.me td { background: rgba(255, 205, 117, 0.12); }
+.board-table tr.me td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
+.board-table tr.gap td { text-align: center; color: var(--grey); padding: 0; line-height: 1; }
+.board-table tr[data-name] { cursor: pointer; }
+.board-table tr[data-name]:hover td { background: rgba(255, 205, 117, 0.08); }
+.board-table .mods { white-space: nowrap; cursor: help; }
+.board-table .mods .icon { vertical-align: middle; }
+.board-table .mods.named { display: block; max-width: 9em; white-space: normal; line-height: 1.3; }
+.board-table .hc-tag { margin-right: 4px; vertical-align: middle; }
+@media (hover: none) and (pointer: coarse) { .board-table tr[data-name] td { padding-top: 10px; padding-bottom: 10px; } }
+.panel button.name-link { all: unset; cursor: pointer; color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; word-break: break-word; }
+.panel button.name-link:hover, .panel button.name-link:focus-visible { color: var(--yellow); }
+.profile-top { display: flex; gap: 24px; justify-content: center; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; text-align: left; }
+.profile-top .title-char { margin: 0; }
+.profile-best { width: 100%; }
+.profile-best tr.head td { color: var(--grey); border-bottom: 1px dashed var(--slate); }
+.profile-best td { text-align: right; white-space: nowrap; }
+.profile-best td:first-child { text-align: left; color: var(--paper); white-space: normal; }
+.profile-ach { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.profile-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 12px; background: var(--ink); border: 1px solid var(--slate); border-radius: 6px; }
+.panel.account { width: min(520px, calc(100vw - 32px)); }
+.panel.account p { line-height: 1.4; }
+.panel.account button.primary.google { width: 100%; }
+.panel.account button.wide-btn { display: block; width: 100%; margin: 8px 0 0; }
+.sync-line { color: var(--grey); font-size: 13px; }
+.sign-in-error { color: var(--yellow); font-size: 13px; }
+.name-row { display: flex; gap: 8px; margin-top: 12px; }
+.name-row .board-name { flex: 1; min-width: 0; }
+.save-picks { display: flex; gap: 12px; flex-wrap: wrap; }
+.panel button.save-pick { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.board-post { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+.board-post .board-name { width: 210px; }
+.board-post .board-msg { flex-basis: 100%; text-align: center; }
+.posting-as { font-size: 14px; }
