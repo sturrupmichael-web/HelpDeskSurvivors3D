@@ -72,7 +72,8 @@ function playtest(act) {
 const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyR: 'restart' };
 
 onKeyPress((code) => {
-  if (!panel.open && levelUp.key(code)) return; // the cards take the keys while they're up
+  // The cards take the keys while they're up, except the FPS counter and Settings.
+  if (code !== 'KeyF' && code !== 'KeyO' && !panel.open && levelUp.key(code)) return;
   if (PLAYTEST_KEYS[code] && !panel.open) playtest(PLAYTEST_KEYS[code]);
   else if (code === 'KeyF') {
     settings.fps = !settings.fps;

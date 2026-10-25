@@ -61,6 +61,11 @@ export const tests = [
     await page.waitForSelector('.levelup-panel .card', { timeout: 10000 });
     const level = await page.evaluate(() => sim.player.level);
     await page.waitForTimeout(500); // taps are ignored for a moment
+    const fpsOn = () => page.evaluate(() => !document.querySelector('.fps').hidden);
+    const before = await fpsOn();
+    await page.keyboard.press('KeyF'); // still works while the cards are up
+    assert((await fpsOn()) !== before, 'F was swallowed by the cards');
+    await page.keyboard.press('KeyF');
     await page.keyboard.press('Digit1');
     await page.waitForFunction(() => !sim.choices);
     await page.waitForFunction(() => document.querySelector('.screen').hidden);
