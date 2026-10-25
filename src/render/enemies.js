@@ -3,9 +3,12 @@
 // (the VIP's aura, Badge Brenda's reader range), and what's wrong with each user over their
 // head (stunned, confused, flagged by a tool). Each frame writes matrices into preallocated
 // buffers; nothing is created per user, so a thousand users cost a handful of draw calls.
+// With `lod` on (Settings, Quality: on by default on phones), users away from the tech are
+// drawn from a low-detail copy of their model with no outline, at about a quarter of the
+// cost. That's most of a crowd closing in from the screen's edges, where users are small.
 
 import * as THREE from 'three';
-import { USER_MODELS, STATUS_MODELS, flatMaterial, flashToonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
+import { USER_MODELS, STATUS_MODELS, lowDetail, flatMaterial, flashToonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -15,23 +18,42 @@ const pos = new THREE.Vector3();
 const scl = new THREE.Vector3();
 const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
+// A user is far once they're this share of the way from the tech to the farthest corner
+// of the visible floor.
+const NEAR = 0.45;
+
+function changed(mesh) {
+  if (!mesh.count) return;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.userData.flash.needsUpdate = true;
+}
+
+// One batch of a user model (with its per-instance hit flash).
+function batch(scene, geo, capacity) {
+  const flash = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  flash.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aFlash', flash);
+  const mesh = new THREE.InstancedMesh(geo, flashToonMaterial, capacity);
+  mesh.userData.flash = flash;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.frustumCulled = false; // instances spread across the floor; bounds would be stale
+  mesh.count = 0;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
 export class EnemyView {
   constructor(scene, capacity) {
     this.capacity = capacity;
-    this.kinds = new Map(); // sprite id -> InstancedMesh
+    this.lod = false; // draw far users in low detail (see FAR)
+    this.kinds = new Map(); // sprite id -> InstancedMesh (its far copy is userData.far)
     for (const [id, build] of Object.entries(USER_MODELS)) {
       const geo = build();
       geo.computeBoundingBox();
       // Hit flash per instance (see flashToonMaterial).
-      const flash = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
-      flash.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aFlash', flash);
-      const mesh = new THREE.InstancedMesh(geo, flashToonMaterial, capacity);
-      mesh.userData.flash = flash;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.frustumCulled = false; // instances spread across the floor; bounds would be stale
-      mesh.count = 0;
-      mesh.receiveShadow = true;
+      const mesh = batch(scene, geo, capacity);
+      mesh.userData.far = batch(scene, lowDetail(build), capacity);
       // The outline: the same instances again in ink, sharing the matrices.
       const ink = new THREE.InstancedMesh(mesh.geometry, outlineMaterial, capacity);
       ink.instanceMatrix = mesh.instanceMatrix;
@@ -39,7 +61,7 @@ export class EnemyView {
       ink.count = 0;
       mesh.userData.ink = ink;
       mesh.userData.top = geo.boundingBox.max.y; // where the status markers float
-      scene.add(mesh, ink);
+      scene.add(ink);
       this.kinds.set(id, mesh);
     }
     this.shadows = new THREE.InstancedMesh(
@@ -80,9 +102,11 @@ export class EnemyView {
     this.missing = new Set(); // sprite ids with no model yet (warned once)
   }
 
-  // `rect` is the visible floor in world px; users well outside it are skipped.
-  update(sim, alpha, rect) {
-    for (const mesh of this.kinds.values()) mesh.count = 0;
+  // `rect` is the visible floor in world px; users well outside it are skipped. (tx, tz) is
+  // the tech, in scene units, to tell near users from far.
+  update(sim, alpha, rect, tx, tz) {
+    for (const mesh of this.kinds.values()) mesh.count = mesh.userData.far.count = 0;
+    const far2 = this.lod ? px(rect.radius * NEAR) ** 2 : Infinity;
     let shadows = 0;
     let auras = 0;
     let badges = 0;
@@ -97,8 +121,8 @@ export class EnemyView {
     for (let i = 0; i < pool.count; i++) {
       const e = pool.items[i];
       if (e.dead || e.def.boss) continue; // bosses have their own models (bosses.js)
-      const mesh = this.kinds.get(e.def.sprite);
-      if (!mesh) {
+      const kind = this.kinds.get(e.def.sprite);
+      if (!kind) {
         if (!this.missing.has(e.def.sprite)) {
           this.missing.add(e.def.sprite);
           console.warn('No 3D model yet for', e.def.sprite);
@@ -110,6 +134,7 @@ export class EnemyView {
       if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
       const x = px(wx);
       const z = px(wy);
+      const mesh = (x - tx) ** 2 + (z - tz) ** 2 > far2 ? kind.userData.far : kind;
       // Waddle: a side-to-side rock and a little hop in step, slower when stunned.
       const t = e.animT * (e.def.speed > 45 ? 11 : 8);
       const rock = e.stun > 0 ? 0 : Math.sin(t) * 0.12;
@@ -123,7 +148,7 @@ export class EnemyView {
       m.makeScale(s * (e.r / 7), 1, s * (e.r / 7)).setPosition(x, 0.012, z);
       this.shadows.setMatrixAt(shadows++, m);
       if (e.stun > 0 || e.confuse > 0 || e.mark > 0) {
-        const y = (mesh.userData.top + 0.22) * s;
+        const y = (kind.userData.top + 0.22) * s;
         if (e.stun > 0) stun.setMatrixAt(stun.count++, m.makeRotationY(spin + i).scale(scl.set(1.5, 1.5, 1.5)).setPosition(x, y + 0.05, z));
         else if (e.confuse > 0) confuse.setMatrixAt(confuse.count++, m.makeScale(1.5, 1.5, 1.5).setPosition(x + 0.2, y + Math.sin(e.animT * 6) * 0.06, z));
         if (e.mark > 0) mark.setMatrixAt(mark.count++, m.makeScale(1.5, 1.5, 1.5).setPosition(x - 0.32, y - 0.05, z));
@@ -142,9 +167,8 @@ export class EnemyView {
     }
     for (const mesh of this.kinds.values()) {
       mesh.userData.ink.count = mesh.count;
-      if (!mesh.count) continue;
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.userData.flash.needsUpdate = true;
+      changed(mesh);
+      changed(mesh.userData.far);
     }
     if (stun.count) stun.instanceMatrix.needsUpdate = true;
     if (confuse.count) confuse.instanceMatrix.needsUpdate = true;

@@ -1,5 +1,6 @@
 // The Settings panel (gear button, or O): quality options, the FPS counter, sound and
-// comfort options, and camera sliders for playtesting. Changes apply at once and are saved.
+// comfort options, the camera, and the playtest helpers where they're allowed (src/playtest.js).
+// Changes apply at once and are saved.
 
 import { saveSettings, defaultSettings } from './settings.js';
 
@@ -7,7 +8,8 @@ const pct = (v) => `${Math.round(v * 100)}%`;
 const RES_LABELS = { low: 'Low (1x)', medium: 'Medium (1.5x)', high: 'High (native)' };
 
 export class SettingsPanel {
-  // `onChange(settings)` applies them to the game; `playtest(action)` runs a playtest helper.
+  // `onChange(settings)` applies them to the game; `playtest(action)` runs a playtest helper
+  // (null: no helpers, as on the live site).
   constructor(root, settings, onChange, playtest) {
     this.s = settings;
     this.onChange = onChange;
@@ -44,6 +46,7 @@ export class SettingsPanel {
       <h3>Quality</h3>
       ${toggle('shadows', 'Shadows')}
       ${toggle('outlines', 'Outlines')}
+      ${toggle('lod', 'Simpler far-away users')}
       <div class="row"><span>Resolution</span><span class="choices">${Object.entries(RES_LABELS)
         .map(([k, l]) => `<button class="choice${s.resolution === k ? ' on' : ''}" data-res="${k}">${l}</button>`)
         .join('')}</span></div>
@@ -56,11 +59,11 @@ export class SettingsPanel {
       ${toggle('numbers', 'Damage numbers')}
       ${toggle('vibration', 'Vibration (phones)')}
       ${toggle('stick', 'Touch joystick')}
-      <h3>Camera (playtest tuning)</h3>
+      <h3>Camera</h3>
       <div class="row"><span>Tilt <b class="v-tilt">${s.tilt}°</b></span><input type="range" min="40" max="70" step="1" value="${s.tilt}" data-range="tilt"></div>
       <div class="row"><span>Distance <b class="v-zoom">${s.zoom.toFixed(2)}x</b></span><input type="range" min="0.7" max="1.5" step="0.05" value="${s.zoom}" data-range="zoom"></div>
       <div class="row buttons"><button data-act="reset-camera">Reset camera</button></div>
-      <h3>Playtest helpers</h3>
+      ${this.playtest ? `<h3>Playtest helpers</h3>
       <div class="grid">
         <button data-play="spawn50">+50 users <kbd>1</kbd></button>
         <button data-play="spawn300">+300 users <kbd>2</kbd></button>
@@ -80,7 +83,7 @@ export class SettingsPanel {
         <button data-play="pay">+$1,000 Overtime Pay <kbd>G</kbd></button>
         <button data-play="map">Unlock the next map, then Hardcore <kbd>L</kbd></button>
         <button data-play="wipe" class="confirm">Wipe the save</button>
-      </div>
+      </div>` : ''}
       <div class="row buttons"><button data-act="close">Close <kbd>O</kbd></button></div>`;
   }
 
@@ -94,7 +97,7 @@ export class SettingsPanel {
       b.textContent = 'Wipe everything? Tap again';
       return;
     }
-    if (b.dataset.play) {
+    if (b.dataset.play && this.playtest) {
       this.playtest(b.dataset.play);
       return this.toggle(false);
     }

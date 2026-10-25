@@ -317,6 +317,7 @@ kbd {
 .controls { margin-top: 8px; font-size: 12px; color: var(--grey); line-height: 1.9; }
 @media (hover: none) and (pointer: coarse) { .keys-only { display: none; } }
 .version { font-size: 11px; color: var(--slate); margin: 8px 0 0; }
+.version a { color: var(--slate); text-decoration: underline; }
 @media (max-width: 760px) { .panel.title { left: 50%; transform: translate(-50%, -50%); } }
 .panel.chars { width: min(1040px, calc(100vw - 32px)); }
 .panel.chars h2, .panel.chars .sub, .panel.chars .setup-step { text-align: center; }

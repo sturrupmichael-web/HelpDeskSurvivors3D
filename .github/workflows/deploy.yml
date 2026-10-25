@@ -1,5 +1,5 @@
 # Builds and publishes the game to GitHub Pages after Tests passes on main
-# (Settings > Pages > Source must be set to "GitHub Actions"). Only index.html is served.
+# (Settings > Pages > Source must be set to "GitHub Actions"). site.mjs lists what is served.
 name: Deploy
 
 on:

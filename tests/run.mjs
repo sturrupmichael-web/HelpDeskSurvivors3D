@@ -25,7 +25,7 @@ for (const file of readdirSync(new URL('.', import.meta.url)).filter((f) => f.en
     }
   };
   if (!mod.browser) await run(file)();
-  else for (const page of (mod.pages ?? ['dev.html', 'index.html']).filter((p) => existsSync(new URL(`../${p}`, import.meta.url)))) await withPage(page, run(`${file} on ${page}`));
+  else for (const page of (mod.pages ?? ['dev.html', 'index.html']).filter((p) => existsSync(new URL(`../${p.replace(/^\/\/[^/]+\//, '').split('?')[0]}`, import.meta.url)))) await withPage(page, run(`${file} on ${page}`));
 }
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
