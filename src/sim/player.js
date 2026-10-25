@@ -126,7 +126,7 @@ export function updatePlayer(game, axis, dt) {
   // Overtime exhaustion: every overtime level drains a little more sanity per second, so
   // even a build users can't touch burns out eventually.
   const ot = game.spawner.overtimeLevel(game);
-  if (ot && !p.god) p.hp -= OVERTIME.drainPerLevel * ot * dt;
+  if (ot && !p.god && game.victoryT <= 0) p.hp -= OVERTIME.drainPerLevel * ot * dt;
 }
 
 // Sanity damage. Returns true if any damage was applied.

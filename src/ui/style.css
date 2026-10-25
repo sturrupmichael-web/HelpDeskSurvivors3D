@@ -197,6 +197,16 @@ kbd {
 .edge-arrow { position: absolute; left: 0; top: 0; width: 0; height: 0; }
 .edge-arrow::before { content: ''; position: absolute; left: -9px; top: -9px; border: 9px solid transparent; border-left: 16px solid var(--yellow); filter: drop-shadow(0 0 2px var(--ink)); animation: blink 0.5s ease-in-out infinite alternate; }
 .edge-arrow[hidden] { display: none; }
+/* Boss bar along the bottom (the original's), orange and pulsing in the second phase. */
+.hud-boss { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); width: min(560px, 80vw); text-align: center; pointer-events: none; }
+.hud-boss[hidden] { display: none; }
+.hud-boss .boss-name { font-size: 13px; font-weight: bold; color: var(--yellow); margin-bottom: 4px; letter-spacing: 1px; text-shadow: 0 1px 2px var(--ink); text-wrap: balance; }
+.hud-boss .boss-bar { height: 12px; background: var(--ink); border: 2px solid var(--ink); box-shadow: 0 0 0 1px var(--slate); }
+.hud-boss .boss-fill { display: block; height: 100%; width: 100%; background: var(--red); }
+.hud-boss.angry .boss-fill { background: #ef7d57; }
+.hud-boss.angry .boss-bar { animation: boss-angry 0.5s steps(2) infinite; }
+.hud-boss.angry .boss-name::after { content: " \2022  ENRAGED"; color: #ef7d57; }
+@keyframes boss-angry { 50% { box-shadow: 0 0 0 1px var(--red), 0 0 8px var(--red); } }
 .hud-pause {
   position: absolute;
   top: max(8px, env(safe-area-inset-top));
@@ -210,7 +220,7 @@ kbd {
   font: 700 16px/1 ui-monospace, monospace;
   cursor: pointer;
 }
-@media (prefers-reduced-motion: reduce) { .hud-timer small.over, .hud-sanity.low .bar i, .edge-arrow::before, .hud-banner.show { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hud-timer small.over, .hud-sanity.low .bar i, .edge-arrow::before, .hud-banner.show, .hud-boss.angry .boss-bar { animation: none; } }
 @media (max-width: 600px) {
   .hud-timer .t { font-size: 22px; }
   .hud-timer small { font-size: 10px; }

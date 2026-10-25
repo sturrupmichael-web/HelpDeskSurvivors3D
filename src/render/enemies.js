@@ -80,7 +80,7 @@ export class EnemyView {
     const y1 = rect.y1 + 64;
     for (let i = 0; i < pool.count; i++) {
       const e = pool.items[i];
-      if (e.dead) continue;
+      if (e.dead || e.def.boss) continue; // bosses have their own models (bosses.js)
       const mesh = this.kinds.get(e.def.sprite);
       if (!mesh) {
         if (!this.missing.has(e.def.sprite)) {

@@ -106,6 +106,33 @@ export const tests = [
     await page.waitForFunction(() => !sim.over && sim.time < 2);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['B starts a boss fight with a boss bar, and K-ing the Executive down clocks you out', async (page) => {
+    // The summary from the last test hides on the next frame; until then it takes the keys.
+    await page.waitForFunction(() => [...document.querySelectorAll('.screen')].every((el) => el.hidden));
+    await page.evaluate(() => {
+      sim.player.god = true;
+      sim.spawner.stopped = true;
+    });
+    await page.keyboard.press('KeyB');
+    await page.waitForSelector('.hud-boss:not([hidden])', { timeout: 10000 });
+    assert((await page.textContent('.boss-name')) === 'Major Incident', await page.textContent('.boss-name'));
+    await page.waitForFunction(() => view.bosses.models.incident?.[0]?.root.visible, null, { timeout: 10000 });
+    // Straight to the Executive, then close it.
+    await page.evaluate(() => {
+      sim.boss.dead = true;
+      sim.time = 1150;
+      sim.debugBoss();
+    });
+    await page.waitForFunction(() => document.querySelector('.boss-name').textContent.startsWith('The Executive'), null, { timeout: 10000 });
+    for (let i = 0; i < 4; i++) await page.keyboard.press('KeyK');
+    await page.waitForSelector('.summary', { timeout: 30000 });
+    const title = await page.textContent('.summary h1');
+    assert(title === 'CLOCKED OUT!', `title ${title}`);
+    await page.waitForTimeout(700);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.over && sim.time < 2 && document.querySelector('.hud-boss').hidden);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
   ['M mutes the sound and the HUD says so', async (page) => {
     await page.keyboard.press('KeyM');
     await page.waitForSelector('.hud .muted:not([hidden])', { timeout: 5000 });

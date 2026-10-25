@@ -5,7 +5,7 @@
 //   points sit just outside that shape (game.view, kept up to date by the renderer), with
 //   extra padding so a standing figure's head doesn't poke in at the bottom edge.
 // - Only users whose behavior has been ported spawn yet (`ready`); the others are left out
-//   of the mix, and boss events wait for their bosses.
+//   of the mix, and boss events whose boss isn't ported are skipped.
 // Not yet ported: map mix boosts and map-only users, Shift Policies, the map's own boss.
 
 import { TIMELINE, EVENTS, SPAWNER, SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
@@ -52,6 +52,7 @@ export class Spawner {
   reset() {
     this.acc = 0;
     this.nextEvent = 0; // index into EVENTS
+    this.done = new Set(); // events already run early by a playtest key (skipped when their time comes)
     this.warned = -1;
     this.storm = null; // active storm: { ev, left, t }
     this.bossScale = 1; // spawn-rate multiplier while a boss is up (event's spawnScale)
@@ -137,8 +138,8 @@ export class Spawner {
   events(game, dt) {
     const t = game.time;
     let ev = EVENTS[this.nextEvent];
-    // Boss fights wait for their bosses (later milestones): skip them quietly.
-    while (ev && ev.type === 'boss' && !BEHAVIORS[ENEMIES[ev.boss]?.behavior]) ev = EVENTS[++this.nextEvent];
+    // Boss fights whose boss isn't ported yet (the map bosses): skip them quietly.
+    while (ev && ((ev.type === 'boss' && !BEHAVIORS[ENEMIES[ev.boss]?.behavior]) || this.done.has(ev))) ev = EVENTS[++this.nextEvent];
     if (ev) {
       if (this.warned !== this.nextEvent && t >= ev.t - ev.warn) {
         this.warned = this.nextEvent;
@@ -149,6 +150,7 @@ export class Spawner {
         this.nextEvent++;
         if (ev.type === 'ring') this.ringEvent(game, ev);
         else if (ev.type === 'storm') this.storm = { ev, left: ev.waves, t: 0 };
+        else if (ev.type === 'boss') this.bossEvent(game, ev);
         game.shake(3);
       }
     }
@@ -158,6 +160,22 @@ export class Spawner {
       s.t = s.ev.gap;
       if (--s.left <= 0) this.storm = null;
     }
+  }
+
+  // Bosses always spawn at full base HP and speed (no timeline scaling).
+  bossEvent(game, ev) {
+    const pool = game.enemies;
+    if (pool.count >= pool.capacity) {
+      // Make room: a boss must never fail to show up because the floor is full.
+      for (let i = 0; i < 20; i++) if (!pool.items[i].def.boss) pool.items[i].dead = true;
+      pool.compact();
+    }
+    const pt = this.ringPoint(game);
+    const e = spawnEnemy(game, ev.boss, pt.x, pt.y);
+    if (!e) return null;
+    this.bossScale = ev.spawnScale ?? 1;
+    game.setBoss(e);
+    return e;
   }
 
   ringEvent(game, ev) {

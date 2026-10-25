@@ -100,6 +100,8 @@ function playtest(act) {
     banner.show('TOOLS LEVELLED UP', p.weapons.map((w) => `${w.def.name} ${w.level}`).join(' · '), 2.5);
   } else if (act === 'xp') sim.debugLevelUp();
   else if (act === 'chest') sim.debugChest();
+  else if (act === 'boss') sim.debugBoss();
+  else if (act === 'hitboss' && !sim.debugHitBoss()) banner.show('NO BOSS', 'Press B to start a boss fight first.', 1.5);
   else if (act === 'evokit') {
     sim.debugEvolveKit();
     sim.debugChest();
@@ -111,7 +113,7 @@ function playtest(act) {
   } else if (act === 'clear') sim.debugClear();
   else if (act === 'restart') newShift();
 }
-const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyR: 'restart' };
+const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyB: 'boss', Equal: 'boss', KeyK: 'hitboss', KeyR: 'restart' };
 
 // Keys go to the topmost thing on screen: Settings, then the summary, the cards, the pause
 // menu, and last the floor. F (FPS counter) works everywhere.

@@ -10,6 +10,8 @@ import { WeaponView } from './weapons.js';
 import { PickupView } from './pickups.js';
 import { FxView } from './fx.js';
 import { ZoneView } from './zones.js';
+import { BossView } from './bosses.js';
+import { HazardView } from './hazards.js';
 import { FOOT } from '../sim/player.js';
 
 const BACKGROUND = '#1a1c2c'; // the original's near-black navy
@@ -82,6 +84,8 @@ export class View {
     this.pickups = new PickupView(this.scene);
     this.fx = new FxView(this.scene);
     this.zones = new ZoneView(this.scene);
+    this.bosses = new BossView(this.scene);
+    this.hazards = new HazardView(this.scene);
     this.techYaw = 0;
     this.walkPhase = 0;
 
@@ -155,6 +159,8 @@ export class View {
     this.pickups.update(this.sim, alpha, this.rig.footprint);
     this.fx.update(dt, this.sim.frozen);
     this.zones.update(this.sim);
+    this.bosses.update(this.sim, alpha, dt);
+    this.hazards.update(this.sim, alpha);
 
     // The sun's shadow box follows the camera, snapped to its texel grid so edges don't crawl.
     const step = (SHADOW_SPAN * 2) / this.sun.shadow.mapSize.x;
