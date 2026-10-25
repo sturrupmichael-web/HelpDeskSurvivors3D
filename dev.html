@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Helpdesk Survivors 3D</title>
+  <meta name="theme-color" content="#1a1c2c">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="src/ui/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui"></div>
+  <div id="boot">Loading…</div>
+  <script>
+    // Shows load errors on the page instead of a blank screen (main.js removes #boot once running).
+    addEventListener('error', (e) => {
+      const b = document.getElementById('boot');
+      if (b) b.textContent = 'The game failed to load: ' + (e.message || (e.target && (e.target.src || e.target.href)) || 'unknown error');
+    }, true);
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
