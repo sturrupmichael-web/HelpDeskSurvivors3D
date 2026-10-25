@@ -2,9 +2,9 @@
 // records. Ported from the original's src/game/meta.js. Differences: the simulation has no
 // storage of its own, so the page hands in a `store` ({ load(), save(data) }; main.js
 // keeps it in localStorage, tests in memory); there is no preview build that opens
-// everything; and only maps that are built (MAPS_BUILT) can be picked or unlocked. Until a
-// map is built, whatever winning it unlocks (data/unlocks.js) is open, so nothing that
-// already works disappears while the other maps wait for M11.
+// everything; and only maps that are built (MAPS_BUILT) can be picked or unlocked. A map
+// that isn't built leaves whatever winning it unlocks (data/unlocks.js) open. Every map is
+// built now, so the unlocks are earned as in the original.
 
 import { SHOP, PAYOUT } from '../../data/meta.js';
 import { CHARACTERS } from '../../data/player.js';
@@ -15,8 +15,8 @@ import { cleanPolicies } from './policies.js';
 
 const PREVIEW = false;
 
-// Maps whose floor and twist are ported. M11 adds the rest.
-export const MAPS_BUILT = ['office'];
+// Maps whose floor and twist are ported.
+export const MAPS_BUILT = ['office', 'server', 'callcenter', 'garage', 'merger'];
 
 // A save that lasts as long as the page (headless runs and tests).
 export const memoryStore = () => {

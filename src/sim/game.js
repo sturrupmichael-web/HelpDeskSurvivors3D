@@ -27,7 +27,7 @@ import { createPlayer, updatePlayer, addXp, recomputeStats, FOOT } from './playe
 import { makeEnemy, updateEnemies, resolveEnemies, spawnEnemy, damageEnemy } from './enemies.js';
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
-import { Spawner } from './spawner.js';
+import { Spawner, mapEvent } from './spawner.js';
 import { WEAPONS } from '../../data/weapons.js';
 import { createWeapon, createCrew, setWeaponLevel, updateWeapons, weaponReady } from './weapons/index.js';
 import { createProjectilePool, updateProjectiles } from './projectiles.js';
@@ -38,6 +38,7 @@ import { rollChoices, applyChoice, openChest } from './upgrades.js';
 import { PASSIVES } from '../../data/passives.js';
 import { Score } from './score.js';
 import { Zones } from './zones.js';
+import { MapTwist } from './maps.js';
 import { Hazards } from './hazards.js';
 import { EVENTS } from '../../data/waves.js';
 import { Meta } from './meta.js';
@@ -66,10 +67,9 @@ export class Sim {
     this.toast = hooks.toast ?? noop;
     this.meta = meta;
     this.menu = false; // a menu between shifts is up (the page sets it); the floor waits
-    this.mapId = 'office';
-    this.map = MAPS[this.mapId];
     this.floor = new Floor();
-    this.floor.solid = !!this.map.solid;
+    this.twist = new MapTwist();
+    this.setMap('office');
     this.enemies = new Pool(SPAWNER.maxEnemies, makeEnemy);
     this.hash = new SpatialHash(32, 128, 128, SPAWNER.maxEnemies);
     this.scratch = new Int32Array(SPAWNER.maxEnemies); // query buffers (two, for nested queries)
@@ -83,7 +83,7 @@ export class Sim {
     this.hazards = new Hazards();
     this.boss = null; // the boss on the HUD bar (check bossAlive(): pool objects get reused)
     this.bossUid = 0;
-    this.bossParts = []; // [enemy, uid] for every piece of a boss that splits (the map bosses, later)
+    this.bossParts = []; // [enemy, uid] for every piece of a boss that splits (Rat's Nest, Hostile Takeover)
     this.bossMax = 1; // HP of the whole boss fight, for the HUD bar
     this.bossDef = null;
     // The visible floor around the camera's ground point, in world px: the four screen
@@ -113,8 +113,17 @@ export class Sim {
     this.hash.resize(Math.min(128, Math.ceil((reach * 2) / this.hash.cell)));
   }
 
-  // A new shift with `charId` (by default the tech picked in the save).
-  newRun(charId = this.meta.data.selected) {
+  // Switches the floor and the twist to a map from data/maps.js (the page swaps the music).
+  setMap(id) {
+    this.mapId = id;
+    this.map = MAPS[id];
+    this.floor.setStyle(this.map.floor);
+    this.floor.solid = !!this.map.solid;
+  }
+
+  // A new shift with `charId` on `mapId` (by default the tech and map picked in the save).
+  newRun(charId = this.meta.data.selected, mapId = this.meta.data.map) {
+    if (this.mapId !== mapId) this.setMap(mapId);
     this.charId = charId;
     const def = CHARACTERS[charId];
     this.player = createPlayer(def, this.meta);
@@ -137,6 +146,7 @@ export class Sim {
     this.tickets.clear();
     this.items.clear();
     this.zones.clear();
+    this.twist.reset();
     this.hazards.clear();
     this.spawner.reset();
     this.boss = null;
@@ -192,6 +202,7 @@ export class Sim {
     updateProjectiles(this, dt);
     this.enemies.compact(); // hash indices are stale after this point
     this.zones.update(this, dt);
+    this.twist.update(this, dt);
     this.hazards.update(this, dt);
     updateTickets(this, dt);
     updateItems(this, dt); // may open a chest
@@ -451,13 +462,15 @@ export class Sim {
     });
     return ids.length;
   }
-  // Starts a boss fight right now: the next boss on the timeline, or the Executive.
+  // Starts a boss fight right now: the next boss on the timeline (this map's own at
+  // 10:00), or the Executive.
   debugBoss() {
     const bosses = EVENTS.filter((e) => e.type === 'boss');
-    const ev = bosses.find((e) => e.t > this.time) ?? bosses[bosses.length - 1];
+    const next = bosses.find((e) => e.t > this.time) ?? bosses[bosses.length - 1];
+    const ev = mapEvent(next, this.map);
     this.banner(ev.title, ev.text, 3);
     this.sfx('siren');
-    this.spawner.done.add(ev); // the timeline won't send it again
+    this.spawner.done.add(next); // the timeline won't send it again
     this.spawner.bossEvent(this, ev);
     return ev;
   }

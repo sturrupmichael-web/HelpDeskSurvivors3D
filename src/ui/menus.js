@@ -23,8 +23,8 @@ const DIGITS = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 
 
 export class Menus {
   // `sim` for the save (sim.meta) and achievements; `portrait(techId)` gives a picture URL;
-  // `onStart()` starts a shift with the saved picks; `onPreview()` shows the picked tech on
-  // the floor behind the menu; `onSettings()` opens Settings; `sfx`.
+  // `onStart()` starts a shift with the saved picks; `onPreview(tech, map)` shows a tech on
+  // a map's floor behind the menu (the saved picks by default); `onSettings()` opens Settings; `sfx`.
   constructor(root, { sim, portrait, onStart, onPreview, onSettings, sfx }) {
     this.sim = sim;
     this.portrait = portrait;
@@ -185,8 +185,10 @@ export class Menus {
     };
     const back = () => {
       this.sfx('click');
-      if (isChar || skipped.char) this.title();
-      else this.setup('char', pick);
+      if (isChar || skipped.char) {
+        this.onPreview(); // back to the saved picks
+        this.title();
+      } else this.setup('char', pick);
     };
     // Tapping the highlighted card again moves on, so a double tap (or A twice) is enough.
     const choose = (i) => {
@@ -200,12 +202,14 @@ export class Menus {
       } else if (!usable(id)) return;
       else this.sfx('click');
       pick[key] = id;
+      if (!isChar) this.onPreview(pick.char, pick.map); // walk out onto the map's floor
       again();
     };
     const move = (dir) => {
       const open = ids.filter(usable);
       const at = open.indexOf(pick[key]);
       pick[key] = open[(at + dir + open.length) % open.length];
+      if (!isChar) this.onPreview(pick.char, pick.map);
       this.sfx('click');
       again();
     };
@@ -271,7 +275,7 @@ export class Menus {
     </button>`;
   }
 
-  // Maps that aren't built yet say so (M11 brings them).
+  // A map's card. Picking one shows its floor behind the menu.
   mapCard(id, i, pick) {
     const meta = this.meta;
     const m = MAPS[id];
@@ -281,9 +285,7 @@ export class Menus {
       ? '<b class="ok">PICKED</b>'
       : unlocked
         ? 'Tap to pick'
-        : meta.data.mapsWon.includes(m.unlockAfter)
-          ? 'Coming soon to 3D'
-          : `Locked: win a shift in the ${MAPS[m.unlockAfter].name}`;
+        : `Locked: win a shift in the ${MAPS[m.unlockAfter].name}`;
     return `<button class="card map ${pick.map === id ? 'selected' : ''} ${unlocked ? '' : 'locked'}" data-i="${i}" ${unlocked ? '' : 'disabled'}>
       <div class="card-head"><div><div class="card-name">${m.name}</div>
         <div class="card-level">${m.pay > 1 ? `${m.pay}x Overtime Pay` : 'Standard pay'}</div></div><kbd>${i + 1}</kbd></div>

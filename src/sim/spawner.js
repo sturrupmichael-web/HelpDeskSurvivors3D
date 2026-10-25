@@ -4,9 +4,9 @@
 // - The visible floor is a trapezoid (the far edge is wider), not a rectangle, so spawn
 //   points sit just outside that shape (game.view, kept up to date by the renderer), with
 //   extra padding so a standing figure's head doesn't poke in at the bottom edge.
-// - Only users whose behavior has been ported spawn yet (`ready`); the others are left out
-//   of the mix, and boss events whose boss isn't ported are skipped.
-// Not yet ported: map mix boosts and map-only users, Shift Policies, the map's own boss.
+// - Only users whose behavior has been ported spawn (`ready`); the others are left out of
+//   the mix, and boss events whose boss isn't ported are skipped.
+// Not yet ported: Shift Policies (M12).
 
 import { TIMELINE, EVENTS, SPAWNER, SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
 import { ENEMIES } from '../../data/enemies.js';
@@ -33,6 +33,50 @@ function mixAt(t) {
   let m = TIMELINE[0].mix;
   for (const k of TIMELINE) if (k.t <= t) m = k.mix;
   return readyMix(m);
+}
+
+const hasKeys = (o) => {
+  for (const _ in o) return true;
+  return false;
+};
+
+// The timeline mix with the current map's mixBoost applied, plus the map's own users
+// (newUsers) that have started showing up by time t. Cached per mix, map and how many
+// of the map's users are in.
+const boosted = new WeakMap();
+function mapMix(mix, map, t) {
+  if (!map) return mix;
+  const extra = map.newUsers ?? {};
+  let n = 0;
+  for (const id in extra) if (t >= extra[id].from) n++;
+  if (!n && !hasKeys(map.mixBoost)) return mix;
+  let byMap = boosted.get(mix);
+  if (!byMap) boosted.set(mix, (byMap = new Map()));
+  let list = byMap.get(map);
+  if (!list) byMap.set(map, (list = []));
+  let m = list[n];
+  if (!m) {
+    m = {};
+    let total = 0;
+    for (const id in mix) total += m[id] = mix[id] * (map.mixBoost[id] ?? 1);
+    Object.keys(extra)
+      .slice(0, n)
+      .filter(ready)
+      .forEach((id) => (m[id] = total * extra[id].share));
+    list[n] = m;
+  }
+  return m;
+}
+
+// Each office map can swap the event marked `mapBoss` (the 10:00 boss) for its own
+// (`boss` in data/maps.js). Cached, so the merged event isn't rebuilt every tick.
+const mapEvents = new WeakMap();
+export function mapEvent(ev, map) {
+  if (!ev?.mapBoss || !map.boss) return ev;
+  let byMap = mapEvents.get(ev);
+  if (!byMap) mapEvents.set(ev, (byMap = new Map()));
+  if (!byMap.has(map)) byMap.set(map, { ...ev, ...map.boss });
+  return byMap.get(map);
 }
 
 function pick(mix) {
@@ -106,7 +150,7 @@ export class Spawner {
   spawn(game, id, angle) {
     const t = game.time;
     const pt = this.ringPoint(game, angle);
-    id ??= pick(mixAt(t));
+    id ??= pick(mapMix(mixAt(t), game.map, t));
     const ot = this.overtimeLevel(game);
     const hp = this.sample(t, 'hpMult') * (1 + OVERTIME.hpPerLevel * ot);
     const speed = this.sample(t, 'speedMult') * (1 + Math.min(OVERTIME.maxSpeed, OVERTIME.speedPerLevel * ot));
@@ -138,8 +182,9 @@ export class Spawner {
   events(game, dt) {
     const t = game.time;
     let ev = EVENTS[this.nextEvent];
-    // Boss fights whose boss isn't ported yet (the map bosses): skip them quietly.
-    while (ev && ((ev.type === 'boss' && !BEHAVIORS[ENEMIES[ev.boss]?.behavior]) || this.done.has(ev))) ev = EVENTS[++this.nextEvent];
+    // Events a playtest key already ran (and boss fights whose boss isn't ported): skip them.
+    while (ev && ((ev.type === 'boss' && !BEHAVIORS[ENEMIES[mapEvent(ev, game.map).boss]?.behavior]) || this.done.has(ev))) ev = EVENTS[++this.nextEvent];
+    ev = mapEvent(ev, game.map);
     if (ev) {
       if (this.warned !== this.nextEvent && t >= ev.t - ev.warn) {
         this.warned = this.nextEvent;
