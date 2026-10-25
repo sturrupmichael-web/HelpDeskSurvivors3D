@@ -9,6 +9,7 @@ import { FpsCounter } from './ui/fps.js';
 import { TouchStick } from './ui/touchStick.js';
 import { SettingsPanel } from './ui/settingsPanel.js';
 import { Banner } from './ui/banner.js';
+import { LevelUpScreen } from './ui/levelUp.js';
 import { VERSION } from './version.js';
 
 const canvas = document.getElementById('game');
@@ -28,6 +29,11 @@ view = new View(canvas, sim, { antialias: !isTouchDevice() });
 const fps = new FpsCounter(ui);
 const stick = new TouchStick(ui);
 const panel = new SettingsPanel(ui, settings, apply, playtest);
+const levelUp = new LevelUpScreen(
+  ui,
+  (card, always) => sim.choose(card, always),
+  () => sim.closeChest(),
+);
 
 function apply(s) {
   view.applyQuality(s);
@@ -50,6 +56,12 @@ function playtest(act) {
   } else if (act === 'levelup') {
     sim.debugLevelWeapons();
     banner.show('TOOLS LEVELLED UP', p.weapons.map((w) => `${w.def.name} ${w.level}`).join(' · '), 2.5);
+  } else if (act === 'xp') sim.debugLevelUp();
+  else if (act === 'chest') sim.debugChest();
+  else if (act === 'evokit') {
+    sim.debugEvolveKit();
+    sim.debugChest();
+    banner.show('EVOLUTION KIT', 'Tools maxed with their paired passives. Grab the chest to evolve one.', 2.5);
   } else if (act === 'skip') sim.debugSkip(60);
   else if (act === 'god') {
     p.god = !p.god;
@@ -57,9 +69,11 @@ function playtest(act) {
   } else if (act === 'clear') sim.debugClear();
   else if (act === 'restart') sim.newRun();
 }
-const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', KeyR: 'restart' };
+const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyR: 'restart' };
 
 onKeyPress((code) => {
+  // The cards take the keys while they're up, except the FPS counter and Settings.
+  if (code !== 'KeyF' && code !== 'KeyO' && !panel.open && levelUp.key(code)) return;
   if (PLAYTEST_KEYS[code] && !panel.open) playtest(PLAYTEST_KEYS[code]);
   else if (code === 'KeyF') {
     settings.fps = !settings.fps;
@@ -78,6 +92,7 @@ startLoop(
     view.render(dt, alpha);
     stick.update();
     banner.update(dt, sim);
+    levelUp.update(sim);
     fps.frame(dt, view.renderer.info);
   },
 );

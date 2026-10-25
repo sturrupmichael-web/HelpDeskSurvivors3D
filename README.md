@@ -36,6 +36,10 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | 5 | Playtest: god mode on/off |
 | 6 | Playtest: clear users |
 | 7 | Playtest: level up every tool |
+| 8 | Playtest: enough XP for the next level (level-up cards) |
+| 9 | Playtest: drop a Change Approved chest |
+| 0 | Playtest: evolution kit (max tools + paired passives, and a chest) |
+| 1–4 / tap | Pick a level-up card |
 | R | Playtest: start a new shift |
 
 ## Project layout
@@ -44,10 +48,12 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 data/          balance and content, copied from the original (world pixels, as there)
 src/engine/    fixed-timestep loop, input, object pool, spatial hash (ported)
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
-               projectiles, spawner and wave timeline, floor layout and collision. No Three.js, no DOM
+               projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
+               (upgrades.js), spawner and wave timeline, floor layout and collision. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
-               tool effects, models.js (every shape lives here)
-src/ui/        HTML/CSS overlays: settings, FPS counter, touch stick, event banner and clock
+               tool effects, pickups, models.js (every shape lives here)
+src/ui/        HTML/CSS overlays: settings, FPS counter, touch stick, event banner, clock and XP bar,
+               level-up cards and chests (icons.js is the original's pixel icons)
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```
 

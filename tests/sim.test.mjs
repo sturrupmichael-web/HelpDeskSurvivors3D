@@ -210,3 +210,61 @@ tests.push(
     assert(avg(armed) > avg(bare) + 5, `users ${avg(armed).toFixed(0)} px away, ${avg(bare).toFixed(0)} without the tool`);
   }],
 );
+
+// Milestone 4: Closed Tickets, level-ups, chests.
+tests.push(
+  ['closed users drop tickets, and walking over them gives XP', async () => {
+    const { killEnemy } = await import('../src/sim/enemies.js');
+    const sim = arena(null, 1, 60);
+    const e = sim.enemies.items[0];
+    killEnemy(sim, e, null);
+    assert(sim.tickets.count === 1 && sim.tickets.items[0].value === e.def.xp, 'no ticket for the closed user');
+    const xp0 = sim.player.xp;
+    run(sim, 2, { x: 1, y: 0 }); // the user was straight to the right
+    assert(sim.tickets.count === 0, 'ticket not collected');
+    assert(sim.player.xp > xp0, 'no XP');
+  }],
+  ['a level-up freezes the floor until a card is picked', () => {
+    const sim = arena(null, 10, 150);
+    sim.debugLevelUp();
+    run(sim, STEP, still);
+    assert(sim.choices?.length === 4, `${sim.choices?.length} cards`);
+    const t = sim.time;
+    run(sim, 1, still);
+    assert(sim.time === t, 'the floor kept moving');
+    const card = sim.choices.find((c) => c.kind === 'weapon' && c.level === 1) ?? sim.choices[0];
+    sim.choose(card);
+    assert(!sim.choices && sim.player.level === 2, 'cards still up');
+    if (card.kind === 'weapon') assert(sim.player.weapons.some((w) => w.id === card.id), 'tool not added');
+    run(sim, 0.5, still);
+    assert(sim.time > t, 'the floor did not resume');
+  }],
+  ['level-up cards only offer tools that are ported', async () => {
+    const { rollChoices } = await import('../src/sim/upgrades.js');
+    const sim = arena(null, 0);
+    for (let i = 0; i < 300; i++) {
+      for (const c of rollChoices(sim)) if (c.kind === 'weapon') assert(weaponReady(c.id), `offered ${c.id}`);
+    }
+  }],
+  ['a chest evolves a maxed tool with its passive, otherwise gives upgrades', () => {
+    const sim = arena('reboot', 0);
+    sim.openChest();
+    assert(sim.chest && !sim.chest.evolved && sim.chest.upgrades.length >= 1, 'no upgrades from a plain chest');
+    sim.closeChest();
+    sim.debugEvolveKit();
+    sim.openChest();
+    assert(sim.chest.evolved, 'nothing evolved');
+    assert(sim.player.weapons.some((w) => w.def.evolved), 'no evolved tool');
+  }],
+  ['Extended Warranty brings the tech back from burnout once', () => {
+    const sim = arena(null, 0);
+    sim.player.god = false;
+    sim.player.warranty = 1;
+    sim.player.hp = 0;
+    run(sim, STEP, still);
+    assert(sim.player.hp > 0 && sim.player.warranty === 0 && sim.burnoutT === 0, 'no comeback');
+    sim.player.hp = 0;
+    run(sim, STEP, still);
+    assert(sim.burnoutT > 0, 'came back twice');
+  }],
+);

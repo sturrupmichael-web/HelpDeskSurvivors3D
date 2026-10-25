@@ -7,6 +7,7 @@ import { FloorView } from './floor.js';
 import { createTechModel, blobShadowGeometry, outlineMaterial, px } from './models.js';
 import { EnemyView } from './enemies.js';
 import { WeaponView } from './weapons.js';
+import { PickupView } from './pickups.js';
 import { FOOT } from '../sim/player.js';
 
 const BACKGROUND = '#1a1c2c'; // the original's near-black navy
@@ -73,6 +74,7 @@ export class View {
 
     this.enemies = new EnemyView(this.scene, sim.enemies.capacity);
     this.weapons = new WeaponView(this.scene);
+    this.pickups = new PickupView(this.scene);
     this.techYaw = 0;
     this.walkPhase = 0;
 
@@ -134,6 +136,7 @@ export class View {
     this.floor.update(this.rig.footprint, this.rig.x, this.rig.z);
     this.enemies.update(this.sim, alpha, this.rig.footprint);
     this.weapons.update(this.sim, alpha, dt, x, z);
+    this.pickups.update(this.sim, alpha, this.rig.footprint);
 
     // The sun's shadow box follows the camera, snapped to its texel grid so edges don't crawl.
     const step = (SHADOW_SPAN * 2) / this.sun.shadow.mapSize.x;
