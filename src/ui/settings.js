@@ -9,6 +9,7 @@ export function defaultSettings() {
   const phone = isTouchDevice();
   return {
     shadows: !phone, // real shadows from the sun (off: blob shadows only)
+    outlines: true, // ink outlines round people and furniture
     resolution: phone ? 'low' : 'high', // pixel ratio: low 1x, medium 1.5x, high native (max 2x)
     fps: false, // on-screen FPS counter
     shake: true, // screen shake

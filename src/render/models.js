@@ -5,7 +5,7 @@
 // the renderer only asks for "the player model" or "the geometry of a cubicle row", so a
 // glTF loader can take over any entry here later without touching anything else.
 //
-// Sizes are in scene units: 1 unit = 16 world px (about a metre: the tech is ~1.75 tall).
+// Sizes are in scene units: 1 unit = 16 world px (about a metre: the tech is ~1.65 tall, big head and all).
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -16,6 +16,32 @@ export const px = (v) => v / UNIT;
 
 // One material for every vertex-colored model, so meshes batch well.
 export const flatMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+
+// People are toon-shaded: light falls off in two hard steps instead of a smooth ramp.
+const toonSteps = new THREE.DataTexture(new Uint8Array([150, 255]), 2, 1, THREE.RedFormat);
+toonSteps.minFilter = toonSteps.magFilter = THREE.NearestFilter;
+toonSteps.needsUpdate = true;
+export const toonMaterial = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonSteps });
+
+// ...and outlined, like the original sprites: an "inverted hull", the same geometry drawn
+// again in dark ink with its back faces only, pushed out along the normals. Works with
+// instancing too (the instance matrix is applied after the push).
+export const OUTLINE = 0.028; // outline thickness, scene units
+export const outlineMaterial = new THREE.MeshBasicMaterial({ color: P.k, side: THREE.BackSide });
+outlineMaterial.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+    transformed += normal * ${OUTLINE.toFixed(3)};`,
+  );
+};
+
+// A mesh's outline: a child that shares its geometry.
+export function outlined(mesh) {
+  const ink = new THREE.Mesh(mesh.geometry, outlineMaterial);
+  mesh.add(ink);
+  return mesh;
+}
 
 const tmpColor = new THREE.Color();
 const tmpMatrix = new THREE.Matrix4();
@@ -62,6 +88,42 @@ export const merge = (parts) => {
   return g;
 };
 
+// Soft shapes for people: rounded and low-poly, so the cast reads as cartoon office
+// workers rather than voxels. `sx, sy, sz` squash a shape before it's placed.
+const shaped = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+  geo.scale(sx, sy, sz);
+  return paint(geo, color, x, y, z, rx, ry, rz);
+};
+const sphere = (r, color, x, y, z, sx = 1, sy = 1, sz = 1, w = 7, h = 5) =>
+  shaped(new THREE.SphereGeometry(r, w, h), color, x, y, z, 0, 0, 0, sx, sy, sz);
+// A capsule centered on (x, y, z), tilted by rz (sideways) and rx (forward).
+const capsule = (r, len, color, x, y, z, rx = 0, rz = 0) =>
+  shaped(new THREE.CapsuleGeometry(r, len, 1, 6), color, x, y, z, rx, 0, rz);
+// A turned shape from a [radius, height] profile (bodies, skirts).
+const lathe = (profile, color, segments = 10) =>
+  paint(new THREE.LatheGeometry(profile.map(([r, h]) => new THREE.Vector2(r, h)), segments), color);
+// Hair: a cap over the head, tilted back so it covers more at the back than the front.
+// `reach` is how far down it comes (radians from the crown).
+const hairCap = (r, color, y, reach, tilt = -0.45, sx = 1.04) =>
+  shaped(new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, reach), color, 0, y, -0.01, tilt, 0, 0, sx, 1, 1);
+
+// Everyone shares a body plan (feet at y = 0, facing +z): a big round head, a bean of
+// a torso, short limbs. Heights in scene units.
+const HEAD_Y = 1.26;
+const HEAD_R = 0.33;
+const TORSO = [[0, 0.42], [0.22, 0.43], [0.28, 0.52], [0.285, 0.7], [0.24, 0.88], [0.15, 0.97], [0, 0.99]];
+
+function head(parts, skin, hair, hairStyle) {
+  parts.push(
+    sphere(0.1, skin, 0, 1.0, 0, 1, 1, 1, 6, 3), // neck
+    sphere(HEAD_R, skin, 0, HEAD_Y, 0, 1, 0.95, 0.95, 10, 7),
+    sphere(0.03, P.k, -0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3), // eyes (small: the outline fattens them)
+    sphere(0.03, P.k, 0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3),
+  );
+  if (hairStyle === 'bob') parts.push(hairCap(HEAD_R + 0.03, hair, HEAD_Y + 0.02, 1.95, -0.5, 1.1));
+  else parts.push(hairCap(HEAD_R + 0.025, hair, HEAD_Y + 0.02, 1.45, -0.45));
+}
+
 // --- The tech -------------------------------------------------------------------------
 // Tier 1 Tech from the original sprite: brown hair, grey headset with a boom mic, blue
 // polo, yellow lanyard and white badge, navy trousers, black shoes.
@@ -71,24 +133,28 @@ export function createTechModel() {
   const body = new THREE.Group(); // bobs while walking
   root.add(body);
   const mesh = (geo) => {
-    const m = new THREE.Mesh(geo, flatMaterial);
+    const m = new THREE.Mesh(geo, toonMaterial);
     m.castShadow = true;
-    return m;
+    return outlined(m);
   };
 
-  // Legs hang from the hip (pivot at y = 0.82), so they can swing.
+  // Legs hang from the hip, so they can swing: trouser leg and a round shoe.
   const leg = (side) => {
     const g = new THREE.Group();
-    g.position.set(side * 0.13, 0.82, 0);
-    g.add(mesh(merge([box(0.2, 0.74, 0.22, P.n, 0, -0.78, 0), box(0.22, 0.1, 0.32, P.k, 0, -0.82, 0.04)])));
+    g.position.set(side * 0.11, 0.5, 0);
+    g.add(mesh(merge([capsule(0.095, 0.24, P.n, 0, -0.22, 0), sphere(0.12, P.k, 0, -0.44, 0.05, 1, 0.6, 1.35)])));
     body.add(g);
     return g;
   };
   // Arms hang from the shoulder: sleeve, forearm, hand.
   const arm = (side) => {
     const g = new THREE.Group();
-    g.position.set(side * 0.37, 1.32, 0);
-    g.add(mesh(merge([box(0.17, 0.26, 0.2, P.b, 0, -0.24, 0), box(0.13, 0.3, 0.15, P.s, 0, -0.52, 0), box(0.14, 0.1, 0.16, P.s, 0, -0.6, 0)])));
+    g.position.set(side * 0.3, 0.88, 0);
+    g.add(mesh(merge([
+      capsule(0.08, 0.14, P.b, side * 0.02, -0.12, 0, 0, side * 0.15),
+      capsule(0.06, 0.12, P.s, side * 0.05, -0.3, 0, 0, side * 0.15),
+      sphere(0.075, P.s, side * 0.07, -0.42, 0.01),
+    ])));
     body.add(g);
     return g;
   };
@@ -97,36 +163,26 @@ export function createTechModel() {
   const armL = arm(-1);
   const armR = arm(1);
 
-  body.add(mesh(merge([
-    // Belt and polo.
-    box(0.5, 0.08, 0.28, P.k, 0, 0.78, 0),
-    box(0.56, 0.52, 0.3, P.b, 0, 0.84, 0),
-    box(0.3, 0.06, 0.31, P.w, 0, 1.33, 0), // collar
+  const parts = [
+    lathe(TORSO, P.b), // polo
+    paint(new THREE.CylinderGeometry(0.235, 0.235, 0.06, 12), P.k, 0, 0.45, 0), // belt
+    paint(new THREE.TorusGeometry(0.13, 0.045, 5, 12), P.w, 0, 0.96, 0, Math.PI / 2), // collar
     // Lanyard and badge on the chest.
-    box(0.04, 0.26, 0.02, P.y, -0.07, 1.08, 0.155),
-    box(0.04, 0.26, 0.02, P.y, 0.07, 1.08, 0.155),
-    box(0.14, 0.16, 0.02, P.w, 0, 0.94, 0.16),
-    box(0.1, 0.04, 0.025, P.B, 0, 1.03, 0.16),
-    // Neck and head.
-    box(0.16, 0.08, 0.16, P.s, 0, 1.36, 0),
-    box(0.42, 0.4, 0.38, P.s, 0, 1.42, 0),
-    // Eyes (facing +z, the way the tech walks).
-    box(0.05, 0.07, 0.02, P.k, -0.09, 1.6, 0.19),
-    box(0.05, 0.07, 0.02, P.k, 0.09, 1.6, 0.19),
-    // Hair: a cap over the top and back.
-    box(0.46, 0.12, 0.42, P.h, 0, 1.8, -0.01),
-    box(0.46, 0.28, 0.1, P.h, 0, 1.54, -0.18),
-    box(0.06, 0.12, 0.3, P.h, -0.21, 1.68, -0.03),
-    box(0.06, 0.12, 0.3, P.h, 0.21, 1.68, -0.03),
-    // Headset: band over the top, ear cups, boom mic to the mouth.
-    box(0.5, 0.05, 0.08, P.G, 0, 1.9, 0),
-    box(0.05, 0.25, 0.08, P.G, -0.24, 1.66, 0),
-    box(0.05, 0.25, 0.08, P.G, 0.24, 1.66, 0),
-    box(0.07, 0.16, 0.16, P.k, -0.25, 1.52, 0),
-    box(0.07, 0.16, 0.16, P.k, 0.25, 1.52, 0),
-    rotBox(0.03, 0.03, 0.24, P.G, -0.2, 1.5, 0.12, 0, 0.5, 0),
-    box(0.06, 0.05, 0.05, P.k, -0.11, 1.48, 0.21),
-  ])));
+    capsule(0.016, 0.2, P.y, -0.07, 0.8, 0.255, -0.35, 0.25),
+    capsule(0.016, 0.2, P.y, 0.07, 0.8, 0.255, -0.35, -0.25),
+    rotBox(0.13, 0.16, 0.03, P.w, 0, 0.66, 0.285),
+    rotBox(0.09, 0.035, 0.035, P.B, 0, 0.71, 0.29),
+  ];
+  head(parts, P.s, P.h, 'short');
+  parts.push(
+    // Headset: a band over the top, ear cups, boom mic to the mouth.
+    paint(new THREE.TorusGeometry(HEAD_R + 0.05, 0.025, 4, 14, Math.PI), P.G, 0, HEAD_Y, 0),
+    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, -HEAD_R - 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
+    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, HEAD_R + 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
+    capsule(0.016, 0.26, P.G, -0.27, HEAD_Y - 0.1, 0.17, Math.PI / 2, 0.0),
+    sphere(0.035, P.k, -0.16, HEAD_Y - 0.13, 0.31),
+  );
+  body.add(mesh(merge(parts)));
   return { root, body, legL, legR, armL, armR };
 }
 
@@ -135,76 +191,69 @@ export function createTechModel() {
 // the renderer makes them waddle and bob as a whole. Built facing +z, feet at y = 0.
 
 // A generic office worker, like the original's shared end-user body: hair, skin, a top
-// (with an optional inner shirt showing at the front), trousers or a skirt.
-function person({ hair, skin = P.s, top, inner = null, pants = P.n, skirt = null, hairStyle = 'short' }) {
+// (with an optional inner shirt showing at the neck, or a tie), trousers or a skirt. With
+// `raised`, the right arm is left off for the caller to add holding something up.
+function person({ hair, skin = P.s, top, inner = null, tie = null, pants = P.n, skirt = null, hairStyle = 'short', raised = false }) {
   const parts = [
-    // Shoes and legs (or a skirt over bare legs).
-    box(0.2, 0.1, 0.3, P.k, -0.12, 0, 0.03),
-    box(0.2, 0.1, 0.3, P.k, 0.12, 0, 0.03),
+    sphere(0.115, P.k, -0.11, 0.06, 0.04, 1, 0.6, 1.35), // shoes
+    sphere(0.115, P.k, 0.11, 0.06, 0.04, 1, 0.6, 1.35),
   ];
   if (skirt) {
-    parts.push(box(0.13, 0.4, 0.14, skin, -0.12, 0.1, 0), box(0.13, 0.4, 0.14, skin, 0.12, 0.1, 0));
-    parts.push(cyl(0.27, 0.33, 0.36, skirt, 0, 0.44, 0, 7));
+    parts.push(capsule(0.06, 0.24, skin, -0.1, 0.26, 0), capsule(0.06, 0.24, skin, 0.1, 0.26, 0));
+    parts.push(paint(new THREE.CylinderGeometry(0.25, 0.32, 0.26, 12), skirt, 0, 0.47, 0));
   } else {
-    parts.push(box(0.2, 0.7, 0.22, pants, -0.12, 0.1, 0), box(0.2, 0.7, 0.22, pants, 0.12, 0.1, 0));
+    parts.push(capsule(0.09, 0.24, pants, -0.11, 0.28, 0), capsule(0.09, 0.24, pants, 0.11, 0.28, 0));
   }
-  parts.push(
-    box(0.54, 0.54, 0.3, top, 0, 0.78, 0), // torso
-    box(0.15, 0.48, 0.18, top, -0.35, 0.82, 0), // arms
-    box(0.15, 0.48, 0.18, top, 0.35, 0.82, 0),
-    box(0.13, 0.12, 0.15, skin, -0.35, 0.72, 0), // hands
-    box(0.13, 0.12, 0.15, skin, 0.35, 0.72, 0),
-    box(0.15, 0.08, 0.15, skin, 0, 1.32, 0), // neck
-    box(0.4, 0.38, 0.36, skin, 0, 1.38, 0), // head
-    box(0.05, 0.07, 0.02, P.k, -0.09, 1.57, 0.18), // eyes
-    box(0.05, 0.07, 0.02, P.k, 0.09, 1.57, 0.18),
-  );
-  if (inner) parts.push(box(0.16, 0.5, 0.02, inner, 0, 0.8, 0.155));
-  if (hairStyle === 'bob') {
-    parts.push(box(0.46, 0.14, 0.42, hair, 0, 1.74, -0.01), box(0.48, 0.34, 0.12, hair, 0, 1.42, -0.17));
-    parts.push(box(0.07, 0.34, 0.36, hair, -0.22, 1.42, -0.02), box(0.07, 0.34, 0.36, hair, 0.22, 1.42, -0.02));
-  } else {
-    parts.push(box(0.44, 0.12, 0.4, hair, 0, 1.74, -0.01), box(0.44, 0.22, 0.1, hair, 0, 1.54, -0.17));
-  }
+  parts.push(lathe(TORSO, top));
+  // The shirt underneath shows as a V at the neck, or a tie down the front.
+  if (inner) parts.push(shaped(new THREE.ConeGeometry(0.11, 0.24, 3), inner, 0, 0.86, 0.22, 0, 0, Math.PI, 1, 1, 0.45));
+  if (tie) parts.push(capsule(0.035, 0.24, tie, 0, 0.74, 0.27, -0.2));
+  // Arms hang a little out from the body, hands at the hips.
+  parts.push(capsule(0.07, 0.3, top, -0.33, 0.68, 0, 0, -0.2), sphere(0.075, skin, -0.38, 0.47, 0.01));
+  if (!raised) parts.push(capsule(0.07, 0.3, top, 0.33, 0.68, 0, 0, 0.2), sphere(0.075, skin, 0.38, 0.47, 0.01));
+  head(parts, skin, hair, hairStyle);
   return parts;
 }
+
+// The right arm held up and out, hand at about (0.5, 1.2): for waving something.
+const raisedArm = (top, skin) => [capsule(0.07, 0.3, top, 0.4, 0.96, 0.04, 0, -0.6), sphere(0.075, skin, 0.5, 1.17, 0.06)];
 
 // One builder per user sprite id (data/enemies.js `sprite`). Each returns merged geometry.
 export const USER_MODELS = {
   // Password Reset Pam: purple cardigan over a white blouse, grey skirt, brown bob, waving
   // a yellow sticky note (her password, probably).
   pam: () => {
-    const parts = person({ hair: P.h, top: P.p, inner: P.w, skirt: P.G, hairStyle: 'bob' });
-    parts.push(rotBox(0.15, 0.42, 0.18, P.p, 0.4, 1.32, 0.05, 0, 0, -0.5)); // raised arm
-    parts.push(box(0.26, 0.26, 0.03, P.y, 0.56, 1.5, 0.08)); // sticky note
+    const parts = person({ hair: P.h, top: P.p, inner: P.w, skirt: P.G, hairStyle: 'bob', raised: true });
+    parts.push(...raisedArm(P.p, P.s));
+    parts.push(rotBox(0.24, 0.24, 0.03, P.y, 0.55, 1.33, 0.08, 0, 0, -0.15)); // sticky note
     return merge(parts);
   },
   // "Quick Question" Quinn: green cardigan, blond, a speech bubble with a question mark.
   quinn: () => {
     const parts = person({ hair: P.y, top: P.e, inner: P.w });
-    const bx = 0.42;
-    const by = 2.05;
-    parts.push(box(0.56, 0.46, 0.08, P.w, bx, by, 0)); // bubble
-    parts.push(box(0.12, 0.12, 0.08, P.w, bx - 0.14, by - 0.1, 0)); // tail
+    const bx = 0.44;
+    const by = 1.86;
+    parts.push(sphere(0.3, P.w, bx, by, 0, 1, 0.8, 0.28, 12, 6)); // bubble
+    parts.push(shaped(new THREE.ConeGeometry(0.08, 0.2, 5), P.w, bx - 0.16, by - 0.24, 0, 0, 0, 2.6)); // tail
     // The "?" in dark blocks on the bubble's front.
-    parts.push(box(0.2, 0.06, 0.02, P.k, bx, by + 0.34, 0.05));
-    parts.push(box(0.06, 0.1, 0.02, P.k, bx + 0.08, by + 0.24, 0.05));
-    parts.push(box(0.1, 0.06, 0.02, P.k, bx + 0.02, by + 0.2, 0.05));
-    parts.push(box(0.06, 0.06, 0.02, P.k, bx, by + 0.08, 0.05));
+    parts.push(rotBox(0.16, 0.05, 0.03, P.k, bx, by + 0.12, 0.08));
+    parts.push(rotBox(0.05, 0.09, 0.03, P.k, bx + 0.06, by + 0.06, 0.08));
+    parts.push(rotBox(0.07, 0.05, 0.03, P.k, bx + 0.02, by, 0.08));
+    parts.push(rotBox(0.05, 0.05, 0.03, P.k, bx, by - 0.12, 0.08));
     return merge(parts);
   },
   // Reply-All Randy: white shirt, red tie, black hair, holding up an envelope.
   randy: () => {
-    const parts = person({ hair: P.k, skin: P.S, top: P.w, inner: P.r });
-    parts.push(rotBox(0.15, 0.42, 0.18, P.w, 0.4, 1.32, 0.05, 0, 0, -0.5));
-    parts.push(box(0.4, 0.28, 0.04, P.w, 0.56, 1.46, 0.08)); // envelope
-    parts.push(rotBox(0.27, 0.03, 0.02, P.k, 0.49, 1.66, 0.11, 0, 0, -0.55)); // flap
-    parts.push(rotBox(0.27, 0.03, 0.02, P.k, 0.63, 1.66, 0.11, 0, 0, 0.55));
+    const parts = person({ hair: P.k, skin: P.S, top: P.w, tie: P.r, raised: true });
+    parts.push(...raisedArm(P.w, P.S));
+    parts.push(rotBox(0.36, 0.25, 0.04, P.w, 0.56, 1.3, 0.08)); // envelope
+    parts.push(rotBox(0.24, 0.03, 0.02, P.k, 0.49, 1.36, 0.11, 0, 0, -0.55)); // flap
+    parts.push(rotBox(0.24, 0.03, 0.02, P.k, 0.63, 1.36, 0.11, 0, 0, 0.55));
     return merge(parts);
   },
   // Reply-All Reply: a pint-sized Randy (the original's 16 x 16 sprite).
   randy_small: () => {
-    const g = merge(person({ hair: P.k, skin: P.s, top: P.w, inner: P.r }));
+    const g = merge(person({ hair: P.k, skin: P.s, top: P.w, tie: P.r }));
     g.scale(0.6, 0.6, 0.6);
     return g;
   },

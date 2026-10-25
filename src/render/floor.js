@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { CHUNK, TILE, chunkKey } from '../sim/floor.js';
 import { PALETTE as P } from '../../data/palette.js';
-import { flatMaterial, propsGeometry, px } from './models.js';
+import { flatMaterial, outlined, propsGeometry, px } from './models.js';
 
 const BUILDS_PER_FRAME = 2;
 const GROUND_SIZE = 192; // scene units; snapped to the carpet pattern as the camera moves
@@ -100,7 +100,7 @@ export class FloorView {
     const mesh = new THREE.Mesh(geo, flatMaterial);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    this.scene.add(mesh);
+    this.scene.add(outlined(mesh)); // inked like the people
     return mesh;
   }
 }

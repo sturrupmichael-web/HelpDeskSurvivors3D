@@ -29,7 +29,7 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | WASD / Arrow keys / left stick | Move |
 | Touch | Put a finger down anywhere and drag (floating joystick) |
 | F | FPS counter on/off |
-| O (or the gear button) | Settings: shadows, resolution, FPS counter, screen shake, camera tilt and distance, playtest helpers |
+| O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, screen shake, camera tilt and distance, playtest helpers |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
 | 3 | Playtest: add the next tool |
 | 4 | Playtest: skip ahead 1 minute |
@@ -58,8 +58,10 @@ Rules that keep this working:
 - Simulation units are the original's world pixels on a flat plane (x right, y down the screen),
   so numbers in `data/` port unchanged. The renderer maps (x, y) to Three.js (X, Z) at
   1 unit = 16 px, and draws everything at its feet (`y + foot`), where collision happens.
-- Every model comes from `src/render/models.js` as vertex-colored geometry on one flat-shaded
-  material. To use real art later, swap an entry there for a loaded glTF.
+- Every model comes from `src/render/models.js` as vertex-colored geometry: people are
+  toon-shaded, everything else flat-shaded, and people and furniture get ink outlines
+  (an inverted hull, toggled in Settings). To use real art later, swap an entry there for a
+  loaded glTF.
 - The furniture layout is the original's, chunk for chunk (same seeded RNG sequence), so the
   cubicles stand where they did in 2D.
 - The visible floor is a trapezoid in 3D. The renderer passes its corners to the simulation

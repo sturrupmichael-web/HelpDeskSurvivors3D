@@ -1,9 +1,9 @@
-// Draws the horde: one InstancedMesh per kind of user (from models.js), plus one
-// instanced blob shadow for everyone. Each frame writes matrices into preallocated
+// Draws the horde: one InstancedMesh per kind of user (from models.js) and its outline,
+// plus one instanced blob shadow for everyone. Each frame writes matrices into preallocated
 // buffers; nothing is created per user, so a thousand users cost a handful of draw calls.
 
 import * as THREE from 'three';
-import { USER_MODELS, flatMaterial, blobShadowGeometry, px } from './models.js';
+import { USER_MODELS, toonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -18,12 +18,18 @@ export class EnemyView {
     this.capacity = capacity;
     this.kinds = new Map(); // sprite id -> InstancedMesh
     for (const [id, build] of Object.entries(USER_MODELS)) {
-      const mesh = new THREE.InstancedMesh(build(), flatMaterial, capacity);
+      const mesh = new THREE.InstancedMesh(build(), toonMaterial, capacity);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false; // instances spread across the floor; bounds would be stale
       mesh.count = 0;
       mesh.receiveShadow = true;
-      scene.add(mesh);
+      // The outline: the same instances again in ink, sharing the matrices.
+      const ink = new THREE.InstancedMesh(mesh.geometry, outlineMaterial, capacity);
+      ink.instanceMatrix = mesh.instanceMatrix;
+      ink.frustumCulled = false;
+      ink.count = 0;
+      mesh.userData.ink = ink;
+      scene.add(mesh, ink);
       this.kinds.set(id, mesh);
     }
     this.shadows = new THREE.InstancedMesh(
@@ -75,7 +81,10 @@ export class EnemyView {
       m.makeScale(s * (e.r / 7), 1, s * (e.r / 7)).setPosition(x, 0.012, z);
       this.shadows.setMatrixAt(shadows++, m);
     }
-    for (const mesh of this.kinds.values()) if (mesh.count) mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of this.kinds.values()) {
+      mesh.userData.ink.count = mesh.count;
+      if (mesh.count) mesh.instanceMatrix.needsUpdate = true;
+    }
     this.shadows.count = shadows;
     this.shadows.instanceMatrix.needsUpdate = true;
   }
