@@ -349,6 +349,78 @@ export const PROJECTILE_MODELS = {
   },
 };
 
+// --- Pickups ---------------------------------------------------------------------------
+// Closed Tickets (one per tier in data/pickups.js) and floor items, keyed by the original
+// sprite id. Centered on their origin; the renderer floats, bobs and spins them.
+
+// A ticket stub with a white check on both faces, in its tier color.
+function stub(color) {
+  const check = (z) => [
+    rotBox(0.07, 0.16, 0.02, P.w, -0.06, -0.02, z, 0, 0, 0.7),
+    rotBox(0.07, 0.3, 0.02, P.w, 0.06, 0.02, z, 0, 0, -0.6),
+  ];
+  return merge([
+    rotBox(0.5, 0.34, 0.07, P.k, 0, 0, 0),
+    rotBox(0.44, 0.28, 0.09, color, 0, 0, 0),
+    ...check(0.05),
+    ...check(-0.05),
+  ]);
+}
+
+export const PICKUP_MODELS = {
+  ticket_blue: () => stub(P.B),
+  ticket_green: () => stub(P.e),
+  ticket_gold: () => stub(P.y),
+  // Leftover Vendor-Lunch Pizza: a slice, tip first.
+  pizza: () => merge([
+    paint(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 3), P.y, 0, 0, 0.06, 0, Math.PI, 0),
+    box(0.68, 0.1, 0.12, P.d, 0, -0.04, -0.17),
+    cyl(0.06, 0.06, 0.1, P.r, -0.1, -0.03, -0.02, 6),
+    cyl(0.06, 0.06, 0.1, P.r, 0.12, -0.03, -0.04, 6),
+    cyl(0.05, 0.05, 0.1, P.r, 0.0, -0.03, 0.2, 6),
+  ]),
+  // Bulk Close: the big CLOSED stamp.
+  bulk_close: () => merge([
+    box(0.62, 0.1, 0.36, P.k, 0, -0.3, 0),
+    box(0.58, 0.16, 0.32, P.r, 0, -0.2, 0),
+    box(0.5, 0.04, 0.33, P.w, 0, -0.12, 0),
+    cyl(0.06, 0.08, 0.26, P.h, 0, -0.04, 0, 6),
+    ball(0.13, P.h, 0, 0.28, 0, 1),
+  ]),
+  // Change Approved: a taped-up box with a green check label.
+  chest: () => merge([
+    box(0.64, 0.46, 0.46, P.d, 0, -0.23, 0),
+    box(0.66, 0.06, 0.48, P.h, 0, 0.17, 0), // lid seam
+    box(0.12, 0.48, 0.48, P.y, 0, -0.24, 0), // tape
+    box(0.2, 0.18, 0.02, P.w, -0.18, -0.12, 0.235), // label
+    rotBox(0.04, 0.07, 0.02, P.e, -0.21, -0.13, 0.25, 0, 0, 0.7),
+    rotBox(0.04, 0.12, 0.02, P.e, -0.16, -0.11, 0.25, 0, 0, -0.6),
+  ]),
+  // PTO Request: a calendar page with a beach on it.
+  pto: () => merge([
+    rotBox(0.5, 0.44, 0.06, P.k, 0, 0, 0),
+    rotBox(0.44, 0.38, 0.08, P.w, 0, -0.02, 0),
+    rotBox(0.44, 0.08, 0.09, P.r, 0, 0.17, 0),
+    rotBox(0.44, 0.1, 0.09, P.B, 0, -0.14, 0),
+    ball(0.07, P.y, -0.08, 0.02, 0.04, 0),
+  ]),
+  // Welcome Swag Bag: a navy tote with the new logo.
+  swag_bag: () => merge([
+    rotBox(0.5, 0.44, 0.2, P.a, 0, -0.06, 0),
+    rotBox(0.2, 0.16, 0.22, P.y, 0.04, -0.04, 0),
+    paint(new THREE.TorusGeometry(0.13, 0.025, 4, 10, Math.PI), P.k, 0, 0.16, 0),
+  ]),
+  // Fruit gummies: a purple bag with a window of gummies.
+  gummies: () => merge([
+    rotBox(0.46, 0.4, 0.14, P.p, 0, 0, 0),
+    rotBox(0.46, 0.06, 0.15, P.w, 0, 0.18, 0),
+    rotBox(0.3, 0.2, 0.16, P.w, 0, -0.02, 0),
+    ball(0.05, P.r, -0.07, 0.0, 0.07, 0),
+    ball(0.05, P.e, 0.04, -0.05, 0.07, 0),
+    ball(0.05, P.o, 0.08, 0.04, 0.07, 0),
+  ]),
+};
+
 // Stand-in for a projectile with no model yet: a small cube.
 export const fallbackProjectile = () => box(0.24, 0.24, 0.24, P.w, 0, -0.12, 0);
 

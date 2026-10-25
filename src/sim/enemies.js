@@ -1,11 +1,12 @@
 // End-user horde: pooled enemy objects, movement via behaviors, separation, contact
 // damage, damage and death. Ported from the original's src/game/enemies.js with the
-// drawing removed. Not yet ported (they return with their milestones): Closed Ticket and
-// item drops (4), score and combos (5), map twists, Shift Policies and boss phases.
+// drawing removed. Not yet ported (they return with their milestones): score and combos
+// (5), map twists, Shift Policies and boss phases.
 
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
 import { hurtPlayer, FOOT } from './player.js';
+import { dropTicket, rollItemDrops } from './pickups.js';
 
 export const HIT_SLOTS = 8; // per-weapon "last hit" timestamps for damage-over-time weapons
 const DEFAULT_FOOT = 10;
@@ -256,6 +257,8 @@ export function damageEnemy(game, e, amount, weapon, dx, dy, knockback) {
   if (weapon?.def.bonusVs) amount *= weapon.def.bonusVs[e.def.sprite] ?? 1;
   if (pd.bonusVs) amount *= pd.bonusVs[e.def.sprite] ?? 1;
   if (pd.slowedAmp && e.slow < 1) amount *= 1 + pd.slowedAmp;
+  if (weapon?.def.tagXp) e.tagXp = weapon.def.tagXp; // Asset Tag
+  if (weapon?.def.tagMark) markEnemy(e, weapon.def.tagMark[0], weapon.def.tagMark[1]); // RFID Inventory
   e.hp -= amount;
   if (!e.heavy) e.flash = 0.12;
   else if (e.flash < -0.2) e.flash = 0.06;
@@ -292,8 +295,13 @@ export function markEnemy(e, seconds, amp) {
 export function killEnemy(game, e, weapon) {
   e.dead = true;
   game.kills++;
+  if (e.xp > 0) {
+    const t = dropTicket(game, e.x, e.y, e.xp * e.tagXp);
+    if (weapon?.def.vacuum) t.magnet = true; // Remote Wipe sends the ticket straight to you
+  }
   game.burst(e.x, e.y, e.def.particle, 6);
   game.sfx('pop', e.x);
+  rollItemDrops(game, e);
   const od = e.def.onDeath;
   if (od) {
     const hpMult = game.spawner.sample(game.time, 'hpMult');

@@ -56,6 +56,17 @@ export const tests = [
     assert(page.errors.length === 0, page.errors.join('\n'));
     await page.evaluate(() => sim.newRun());
   }],
+  ['level-up cards appear and a key picks one', async (page) => {
+    await page.evaluate(() => sim.debugLevelUp());
+    await page.waitForSelector('.levelup-panel .card', { timeout: 10000 });
+    const level = await page.evaluate(() => sim.player.level);
+    await page.waitForTimeout(500); // taps are ignored for a moment
+    await page.keyboard.press('Digit1');
+    await page.waitForFunction(() => !sim.choices);
+    await page.waitForFunction(() => document.querySelector('.screen').hidden);
+    assert(level === 2, `level ${level}`);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
   ['quality settings apply', async (page) => {
     await page.click('.gear');
     await page.click('[data-toggle=shadows]');

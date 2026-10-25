@@ -39,7 +39,7 @@ kbd {
 
 .fps {
   position: absolute;
-  top: max(8px, env(safe-area-inset-top));
+  top: calc(max(8px, env(safe-area-inset-top)) + 22px); /* below the level */
   left: max(8px, env(safe-area-inset-left));
   padding: 6px 9px;
   border-radius: 6px;
@@ -136,4 +136,74 @@ kbd {
   font: 600 15px/1.4 ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   pointer-events: none !important;
+}
+
+/* Level-up cards and the Change Approved chest (wording and layout from the original). */
+.screen { position: absolute; inset: 0; background: rgba(10, 12, 24, 0.55); }
+.panel.wide { width: min(1060px, calc(100vw - 32px)); }
+.panel .sub { color: var(--grey); margin: 0 0 14px; font-size: 14px; }
+.levelup-panel h2, .panel.chest h2 { text-align: center; color: var(--yellow); letter-spacing: 0.06em; font-size: 24px; }
+.levelup-panel .sub, .panel.chest .sub { text-align: center; }
+.cards { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.panel button.card {
+  width: 236px;
+  text-align: left;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ink);
+  border: 2px solid var(--slate);
+  border-radius: 10px;
+}
+.panel button.card:hover, .panel button.card:focus-visible { border-color: var(--yellow); background: #222640; }
+.panel button.card.paired { border-color: var(--yellow); box-shadow: 0 0 10px rgba(255, 205, 117, 0.45); }
+.card-head { display: flex; align-items: center; gap: 10px; }
+.card-head > div { flex: 1; }
+.card-name { font-size: 15px; font-weight: 600; }
+.card-level { font-size: 12px; color: var(--yellow); }
+.card-text { font-size: 13px; }
+.card-flavor { font-size: 12px; font-style: italic; color: var(--grey); }
+.card-hint { font-size: 12px; color: var(--yellow); border-top: 1px dashed var(--slate); padding-top: 6px; }
+.icon { flex: none; image-rendering: pixelated; }
+.evo-pair { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; background: var(--yellow); color: var(--ink); font-size: 11px; letter-spacing: 1px; align-self: flex-start; }
+.evo-pair span { font-weight: normal; }
+.evo-pair .icon { background: var(--ink); padding: 1px; border-radius: 2px; }
+.panel button.always { display: block; max-width: 440px; margin: 14px auto 0; font-size: 13px; }
+.panel.chest { text-align: center; }
+.panel.chest .card-text, .panel.chest .card-flavor { margin: 6px 0; }
+.panel button.primary { display: block; margin: 14px auto 0; padding: 8px 18px; background: var(--polo); border-color: var(--blue); font-weight: 600; }
+.evolve { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 14px; }
+.evolve > div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
+.evo-from { opacity: 0.7; }
+.evo-to b { color: var(--yellow); font-size: 15px; }
+.evo-to .icon { filter: drop-shadow(0 0 6px var(--yellow)); }
+.evo-arrow { color: var(--yellow); font-size: 22px; }
+.chest-list { display: flex; flex-direction: column; gap: 8px; margin: 0 auto 6px; max-width: 320px; text-align: left; }
+.chest-item { display: flex; align-items: center; gap: 12px; background: var(--ink); border: 2px solid var(--slate); border-radius: 8px; padding: 6px 10px; }
+@media (max-width: 560px), (max-height: 520px) {
+  .panel button.card { width: 100%; padding: 9px; gap: 5px; }
+  .card-flavor, .card-hint { display: none; }
+  .levelup-panel h2 { font-size: 20px; margin-bottom: 2px; }
+  .levelup-panel .sub { margin-bottom: 8px; }
+}
+
+/* XP bar along the top edge, with the level (the full HUD comes in milestone 5). */
+.xpbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: max(8px, calc(env(safe-area-inset-top) + 4px));
+  background: rgba(26, 28, 44, 0.8);
+  pointer-events: none !important;
+}
+.xpbar i { display: block; height: 100%; width: 0; background: var(--blue); transition: width 0.15s linear; }
+.xpbar b {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: max(8px, env(safe-area-inset-left));
+  font: 600 13px/1 ui-monospace, monospace;
+  color: var(--blue);
+  text-shadow: 0 1px 2px var(--ink);
 }

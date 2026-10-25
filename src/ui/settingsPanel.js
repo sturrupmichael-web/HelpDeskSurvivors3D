@@ -60,6 +60,9 @@ export class SettingsPanel {
         <button data-play="spawn300">+300 users <kbd>2</kbd></button>
         <button data-play="tool">Add a tool <kbd>3</kbd></button>
         <button data-play="levelup">Level up tools <kbd>7</kbd></button>
+        <button data-play="xp">Level up (cards) <kbd>8</kbd></button>
+        <button data-play="chest">Drop a chest <kbd>9</kbd></button>
+        <button data-play="evokit">Evolution kit <kbd>0</kbd></button>
         <button data-play="skip">Skip 1 minute <kbd>4</kbd></button>
         <button data-play="god">God mode <kbd>5</kbd></button>
         <button data-play="clear">Clear users <kbd>6</kbd></button>
