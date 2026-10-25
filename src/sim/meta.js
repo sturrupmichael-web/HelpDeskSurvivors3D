@@ -53,6 +53,8 @@ function fresh() {
     policyUnlocks: [], // policies unlocked by a feat rather than a map win (Change Freeze)
     hardcore: false, // the Hardcore switch is on for the next shift (data/policies.js HARDCORE)
     hardcoreWon: [], // maps with a won Hardcore shift
+    trained: false, // finished the training shift
+    offeredTraining: false, // the first Clock In has offered training
   };
 }
 

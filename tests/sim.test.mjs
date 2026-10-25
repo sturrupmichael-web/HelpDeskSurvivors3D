@@ -9,6 +9,9 @@ import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
 import { spawnEnemy, damageEnemy } from '../src/sim/enemies.js';
 import { ENEMIES } from '../data/enemies.js';
 import { Meta, memoryStore, upgradeSave } from '../src/sim/meta.js';
+import { POLICY_ORDER } from '../data/policies.js';
+import { MAP_ORDER } from '../data/maps.js';
+import { dropTicket } from '../src/sim/pickups.js';
 
 const STEP = 1 / 60;
 const run = (sim, seconds, axis) => {
@@ -683,5 +686,95 @@ tests.push(
     damageEnemy(sim, e, e.maxHp * 0.2, null, 0, 0, 0);
     run(sim, 0.1, still);
     assert(sim.bossParts.length === 2 && sim.bossParts[1][0].def.sprite === 'subsidiary', 'no Subsidiary');
+  }],
+);
+
+// --- Shift Policies, Hardcore and the training shift (M12) -----------------------------
+// A shift with these policies (and maybe Hardcore), as if picked in the Clock In picker.
+function withPolicies(ids, hardcore = false) {
+  const meta = new Meta(memoryStore());
+  meta.data.mapsWon = [...MAP_ORDER]; // every policy and Hardcore open
+  meta.data.shifts = 1;
+  meta.data.policyUnlocks = ['changeFreeze'];
+  meta.setPolicies(ids);
+  meta.setHardcore(hardcore);
+  return new Sim({}, meta);
+}
+
+tests.push(
+  ['every Shift Policy runs a shift', () => {
+    for (const id of POLICY_ORDER) {
+      const sim = withPolicies([id]);
+      assert(sim.policy.ids[0] === id, `${id} not applied`);
+      run(sim, 30, { x: 1, y: 0.3 });
+      assert(sim.time > 0, id);
+    }
+  }],
+  ['policies change slots, stats and starting tools', () => {
+    assert(withPolicies(['budgetCuts']).player.maxWeapons === 4, 'Budget Cuts');
+    assert(withPolicies(['hiringFreeze']).player.maxPassives === 3, 'Hiring Freeze');
+    const glass = withPolicies(['glassDesk']).player;
+    assert(glass.maxHp === Math.round(glass.baseMaxHp * 0.6), `Glass Desk max sanity ${glass.maxHp}`);
+    assert(withPolicies(['auditWeek']).player.stats.damageTaken === 2, 'Audit Week');
+    const lock = withPolicies(['vendorLockIn']).player;
+    assert(lock.weapons.length === 2 && lock.weapons.every((w) => w.level === 3) && lock.maxWeapons === 2, 'Vendor Lock-In');
+    assert(withPolicies(['onboardingBuddy']).player.weapons.length === 2, 'Onboarding Buddy');
+    assert(withPolicies(['longWeekend']).player.longWeekend === 1, 'Long Weekend');
+    assert(withPolicies(['hotDesking']).policy.cards === 2, 'Hot Desking');
+  }],
+  ['policies toughen users and bosses', () => {
+    const sim = withPolicies(['mandatoryFun', 'casualFriday', 'escalated']);
+    const plain = withPolicies([]);
+    const e = spawnEnemy(sim, 'pam', 100, 0, 1);
+    const e0 = spawnEnemy(plain, 'pam', 100, 0, 1);
+    assert(Math.abs(e.maxHp / e0.maxHp - 1.4) < 1e-6, `hp ${e.maxHp}`);
+    assert(Math.abs(e.speed / e0.speed - 1.25) < 1e-6, `speed ${e.speed}`);
+    const boss = spawnEnemy(sim, 'executive', 200, 0, 1);
+    const boss0 = spawnEnemy(plain, 'executive', 200, 0, 1);
+    assert(Math.abs(boss.maxHp / boss0.maxHp - 1.5) < 1e-6, `boss hp ${boss.maxHp}`);
+    assert(sim.policy.mult === 2.28, `mult ${sim.policy.mult}`); // 1.3 * 1.3 * 1.35
+  }],
+  ['Monday Morning starts the queue busy; Ticket Blitz tickets vanish', () => {
+    const monday = withPolicies(['mondayMorning']);
+    assert(monday.spawner.busyTime(monday) === 180, 'no head start');
+    const blitz = withPolicies(['ticketBlitz']);
+    blitz.spawner.update = () => {};
+    blitz.player.weapons = [];
+    dropTicket(blitz, blitz.player.x + 400, blitz.player.y, 1);
+    run(blitz, 9, still);
+    assert(blitz.tickets.count === 1, 'ticket gone too soon');
+    run(blitz, 2, still);
+    assert(blitz.tickets.count === 0, 'ticket stayed');
+  }],
+  ['Hardcore: more users, no Union Rep, no Extended Warranty, double score', () => {
+    const sim = withPolicies(['workFromHome', 'budgetCuts'], true);
+    assert(sim.policy.hardcore && sim.policy.ids.join() === 'budgetCuts', 'perks are off in Hardcore');
+    assert(sim.policy.spawns === 1.5 && sim.policy.otGrace === 120, 'Hardcore effects');
+    assert(sim.player.revives === 0, 'Union Rep in Hardcore');
+    assert(sim.player.locked('passives', 'warranty'), 'Extended Warranty on offer');
+    assert(sim.policy.mult === 2.7, `mult ${sim.policy.mult}`);
+    run(sim, 5, still);
+    sim.player.hp = 0;
+    run(sim, STEP, still);
+    assert(sim.over && sim.over.hardcore && sim.over.score === Math.round(sim.over.csat * 2.7), 'score not multiplied');
+  }],
+  ['the training shift teaches, never burns out, and finishes', () => {
+    const cards = [];
+    const sim = new Sim({ coach: (c) => cards.push(c) });
+    sim.startTutorial();
+    assert(sim.spawner.stopped && sim.policy.ids.length === 0 && sim.mapId === 'office', 'not a plain Office shift');
+    let a = 0;
+    for (let i = 0; i < 60 * 240 && !sim.over; i++) {
+      if (sim.choices) sim.choose(sim.choices[0]);
+      a += 0.01;
+      // Walk in a circle (it finds the pizza by passing near it), and stand on the pizza.
+      const pz = sim.items.items.slice(0, sim.items.count).find((it) => it.id === 'pizza');
+      const ax = pz ? { x: Math.sign(pz.x - sim.player.x), y: Math.sign(pz.y - sim.player.y) } : { x: Math.cos(a), y: Math.sin(a) };
+      sim.tick(STEP, ax);
+      assert(sim.player.hp > 0, 'burned out in training');
+    }
+    assert(sim.over?.training, `training didn't finish (step ${sim.tutorial.step})`);
+    assert(sim.meta.data.trained && sim.meta.data.shifts === 0, 'training counted as a shift');
+    assert(cards.filter(Boolean).length === 5 && cards[cards.length - 1] === null, `${cards.length} coach cards`);
   }],
 );

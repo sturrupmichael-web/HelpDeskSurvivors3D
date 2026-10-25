@@ -5,13 +5,16 @@
 import { PASSIVES, MAX_WEAPONS, MAX_PASSIVES } from '../../data/passives.js';
 import { XP_CURVE } from '../../data/player.js';
 import { OVERTIME } from '../../data/waves.js';
+import { NO_POLICY } from './policies.js';
 
 const STAT_KEYS = ['moveSpeed', 'attackSpeed', 'area', 'damage', 'growth', 'damageTaken', 'cooldown', 'pickupRadius', 'luck'];
 
 // `meta` (src/sim/meta.js) supplies permanent shop bonuses; omit it for a bare player.
-export function createPlayer(def, meta = null) {
+// `policy` is the shift's combined Shift Policies (src/sim/policies.js).
+export function createPlayer(def, meta = null, policy = NO_POLICY) {
+  // Flat bonuses to the stat multipliers from the character, the shop and the policies.
   const bonus = {};
-  for (const k of STAT_KEYS) bonus[k] = (def.bonus?.[k] ?? 0) + (meta ? meta.bonus(k) : 0);
+  for (const k of STAT_KEYS) bonus[k] = (def.bonus?.[k] ?? 0) + (meta ? meta.bonus(k) : 0) + (policy.stats[k] ?? 0);
   const maxHp = def.maxHp + (meta ? meta.bonus('maxHp') : 0);
   const p = {
     def,
@@ -26,13 +29,16 @@ export function createPlayer(def, meta = null) {
     extraCount: def.extraCount ?? 0, // extra projectiles / shields / helpers on every tool (+ Spare Charger)
     baseExtraCount: def.extraCount ?? 0,
     summonDamage: 1 + (def.summonBonus ?? 0), // damage multiplier for turrets and helpers
-    regen: def.regen + (meta ? meta.bonus('regen') : 0), // sanity per second (+ Snack Drawer)
-    baseRegen: def.regen + (meta ? meta.bonus('regen') : 0),
+    regen: def.regen + (meta ? meta.bonus('regen') : 0) + policy.regen, // sanity per second (+ Snack Drawer, Energy Drinks)
+    baseRegen: def.regen + (meta ? meta.bonus('regen') : 0) + policy.regen,
     rerolls: meta ? meta.bonus('rerolls') : 0, // level-up rerolls left this shift
-    revives: meta ? meta.bonus('revives') : 0, // Union Rep comebacks left this shift
+    revives: meta && !policy.noRevive ? meta.bonus('revives') : 0, // Union Rep comebacks left this shift (none in Hardcore)
     warranty: 0, // Extended Warranty comebacks left this shift
-    maxWeapons: MAX_WEAPONS + (def.toolSlots ?? 0),
-    maxPassives: MAX_PASSIVES,
+    longWeekend: policy.revives, // Long Weekend (policy) comebacks left this shift
+    maxWeapons: Math.min(MAX_WEAPONS, policy.maxWeapons) + (def.toolSlots ?? 0), // tool slots (Budget Cuts, Vendor Lock-In; Systems Operations Manager)
+    maxPassives: Math.min(MAX_PASSIVES, policy.maxPassives), // passive slots (Hiring Freeze)
+    noEvolve: policy.noEvolve, // Change Freeze: chests never evolve
+    statMul: policy.statMul, // stat multipliers applied after passives (Audit Week, Glass Desk)
     bonus,
     facing: 0, // radians on the floor plane, 0 = facing down the screen (+y)
     moving: false,
@@ -81,11 +87,11 @@ export function recomputeStats(p) {
   }
   p.stats.cooldown = Math.max(0.2, p.stats.cooldown);
   // Max sanity scales with the Standing Desk passive; the extra sanity arrives filled.
-  const maxHp = Math.round(p.baseMaxHp * p.stats.maxHp);
+  const maxHp = Math.round(p.baseMaxHp * p.stats.maxHp * (p.statMul?.maxHp ?? 1));
   if (maxHp > p.maxHp) p.hp += maxHp - p.maxHp;
   p.maxHp = maxHp;
   p.hp = Math.min(p.hp, maxHp);
-  p.stats.damageTaken = Math.max(0.1, p.stats.damageTaken);
+  p.stats.damageTaken = Math.max(0.1, p.stats.damageTaken) * (p.statMul?.damageTaken ?? 1);
 }
 
 const SLIP_GRIP = 1.6; // how fast you change direction on a wet floor (1/s)

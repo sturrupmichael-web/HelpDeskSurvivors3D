@@ -9,12 +9,14 @@ export const tests = [
     await page.waitForTimeout(500);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
-  ['opens on the title, and Enter clocks in', async (page) => {
+  ['opens on the title, and Enter clocks in (after skipping the training offer)', async (page) => {
     await page.waitForSelector('.panel.title', { timeout: 10000 });
     assert(await page.evaluate(() => sim.menu && sim.frozen), 'the floor runs behind the title');
     assert(await page.evaluate(() => document.querySelector('.hud').hidden), 'the HUD shows on the title');
-    // A fresh save has one tech and one map: straight to work.
+    // A fresh save gets offered training once, then has one tech and one map: straight to work.
     await page.keyboard.press('Enter');
+    await page.waitForSelector('.panel.training', { timeout: 5000 });
+    await page.keyboard.press('Escape');
     await page.waitForFunction(() => !sim.menu && document.querySelector('.menus').hidden);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
@@ -189,6 +191,8 @@ export const tests = [
     await page.keyboard.press('Digit2'); // hire Desktop Support ($300)
     await page.waitForFunction(() => sim.meta.isUnlocked('desktop'));
     await page.keyboard.press('Enter'); // on to the map
+    await page.keyboard.press('Enter'); // on to Shift Policies (open after the first shift)
+    await page.waitForSelector('.card.policy', { timeout: 5000 });
     await page.keyboard.press('Enter'); // Clock In
     await page.waitForFunction(() => !sim.menu && sim.charId === 'desktop' && view.techId === 'desktop');
     assert((await page.evaluate(() => sim.player.maxHp)) === 100, 'the chair did not add sanity'); // 90 + 10
@@ -227,7 +231,8 @@ export const tests = [
     await page.waitForSelector('.setup .card.map', { timeout: 5000 });
     await page.keyboard.press('Digit3'); // Call Center
     await page.waitForFunction(() => sim.menu && sim.mapId === 'callcenter' && view.floor.style === 'callcenter', null, { timeout: 10000 });
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter'); // on to Shift Policies
+    await page.keyboard.press('Enter'); // Clock In
     await page.waitForFunction(() => !sim.menu && sim.mapId === 'callcenter' && sim.meta.data.map === 'callcenter');
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
@@ -241,4 +246,74 @@ export const tests = [
     }
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['Clock In signs Shift Policies, and the HUD and pause menu list them', async (page) => {
+    await toTitle(page);
+    await clockInTo(page, '.card.policy');
+    await page.keyboard.press('KeyR'); // Reorg: 2 random bad policies
+    await page.waitForSelector('.card.policy.selected', { timeout: 5000 });
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.menu && sim.policy.ids.length === 2 && sim.policy.reorg);
+    await page.waitForFunction(() => document.querySelectorAll('.hud-policies:not([hidden]) .pol').length === 2, null, { timeout: 10000 });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-policies', { timeout: 5000 });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-panel', { state: 'hidden', timeout: 5000 });
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['L opens Hardcore once every map is open, and its switch makes a Hardcore shift', async (page) => {
+    for (let i = 0; i < 6 && !(await page.evaluate(() => sim.meta.hardcoreOpen())); i++) {
+      const won = await page.evaluate(() => sim.meta.data.mapsWon.length);
+      await page.keyboard.press('KeyL');
+      await page.waitForFunction((n) => sim.meta.data.mapsWon.length > n, won, { timeout: 5000 });
+    }
+    assert(await page.evaluate(() => sim.meta.hardcoreOpen()), 'Hardcore did not open');
+    await toTitle(page);
+    await clockInTo(page, '.hc-switch');
+    await page.keyboard.press('KeyH');
+    await page.waitForSelector('.hc-switch.on', { timeout: 5000 });
+    await page.keyboard.press('Enter'); // on to Shift Policies: perks are off
+    await page.waitForSelector('.card.policy.perk:disabled', { timeout: 5000 });
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.menu && sim.policy.hardcore && sim.policy.mult >= 2 && sim.player.revives === 0);
+    await page.waitForSelector('.hud-policies .pol.hc', { timeout: 10000 });
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['T on the title starts training with a coach card, and finishing it goes to Clock In', async (page) => {
+    await toTitle(page);
+    await page.keyboard.press('KeyT');
+    await page.waitForSelector('.hud-coach:not([hidden])', { timeout: 10000 });
+    assert(await page.evaluate(() => !!sim.tutorial && sim.policy.ids.length === 0 && !sim.policy.hardcore && sim.mapId === 'office'), 'not a plain Office shift');
+    assert((await page.textContent('.hud-timer .shift')) === 'TRAINING SHIFT', 'no TRAINING SHIFT under the clock');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-panel', { timeout: 5000 });
+    assert((await page.textContent('[data-act=quit]')).startsWith('Skip Training'), 'no Skip Training');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => sim.finishTutorial());
+    await page.waitForSelector('.panel.training h1', { timeout: 5000 });
+    await page.waitForTimeout(700);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.setup', { timeout: 5000 });
+    assert(await page.evaluate(() => sim.meta.data.trained && document.querySelector('.hud-coach').hidden), 'training not remembered');
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
 ];
+
+// From a shift to the title: pause, and Quit to Title (twice, to confirm).
+async function toTitle(page) {
+  await page.waitForFunction(() => [...document.querySelectorAll('.screen:not(.menus)')].every((el) => el.hidden));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.pause-panel', { timeout: 5000 });
+  await page.keyboard.press('KeyQ');
+  await page.keyboard.press('KeyQ');
+  await page.waitForSelector('.panel.title', { timeout: 5000 });
+}
+
+// From the title, Enter through Clock In's steps until `selector` shows.
+async function clockInTo(page, selector) {
+  await page.keyboard.press('Enter');
+  for (let i = 0; i < 3 && !(await page.$(selector)); i++) {
+    await page.waitForSelector('.setup', { timeout: 5000 });
+    await page.keyboard.press('Enter');
+  }
+  await page.waitForSelector(selector, { timeout: 5000 });
+}

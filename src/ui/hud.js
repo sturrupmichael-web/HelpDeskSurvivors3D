@@ -1,12 +1,15 @@
 // In-run HUD as HTML over the canvas: XP bar, shift clock, sanity, tool and passive slots,
-// tickets closed and CSAT, the event banner, the boss bar, a pause button, and an arrow at
-// the screen edge pointing to an off-screen Change Approved chest.
+// tickets closed and CSAT, the event banner, the boss bar, a pause button, an arrow at
+// the screen edge pointing to an off-screen Change Approved chest, the shift's policies
+// under the clock, and the training shift's coach card.
 // Ported from the original's src/ui/hud.js. Values are cached so the DOM is only touched
-// when something changes. Not yet ported: Shift Policies and the training coach.
+// when something changes.
 
 import { icon } from './icons.js';
 import { SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
 import { PASSIVES } from '../../data/passives.js';
+import { POLICIES, HARDCORE } from '../../data/policies.js';
+import { fmtMult } from '../sim/policies.js';
 
 export const fmtTime = (t) => {
   const s = Math.floor(t);
@@ -22,7 +25,8 @@ export class Hud {
     this.root.className = 'hud';
     this.root.innerHTML = `
       <div class="hud-xp"><i></i><b class="hud-level">LV 1</b></div>
-      <div class="hud-timer"><span class="t">00:00</span><small class="shift">SHIFT ENDS ${fmtTime(SHIFT_LENGTH)}</small></div>
+      <div class="hud-timer"><span class="t">00:00</span><small class="shift">SHIFT ENDS ${fmtTime(SHIFT_LENGTH)}</small>
+        <div class="hud-policies" hidden></div></div>
       <div class="hud-left">
         <div class="hud-sanity">
           <span class="label">SANITY</span>
@@ -42,7 +46,8 @@ export class Hud {
       <div class="hud-boss" hidden>
         <div class="boss-name"></div>
         <div class="boss-bar"><i class="boss-fill"></i></div>
-      </div>`;
+      </div>
+      <div class="hud-coach" hidden><small></small><b></b><span></span><div class="coach-bar"><i></i></div></div>`;
     this.pauseButton = document.createElement('button');
     this.pauseButton.className = 'hud-pause';
     this.pauseButton.setAttribute('aria-label', 'Pause');
@@ -61,6 +66,9 @@ export class Hud {
       weapons: q('.weapons'), passives: q('.passives'),
       banner: q('.hud-banner'), arrow: q('.edge-arrow'), muted: q('.muted'),
       boss: q('.hud-boss'), bossName: q('.boss-name'), bossFill: q('.boss-fill'),
+      policies: q('.hud-policies'),
+      coach: q('.hud-coach'), coachStep: q('.hud-coach small'), coachTitle: q('.hud-coach b'), coachText: q('.hud-coach span'),
+      coachBar: q('.coach-bar'), coachFill: q('.coach-bar i'),
     };
     this.cache = {};
     this.bannerT = 0;
@@ -99,6 +107,37 @@ export class Hud {
     this.bannerT = seconds;
   }
 
+  // Training shift coach card: { title, text (may hold <kbd>), step, steps, progress }, or null to hide.
+  coach(c) {
+    const e = this.el;
+    e.coach.hidden = !c;
+    if (!c) return;
+    e.coachStep.textContent = `TRAINING ${c.step}/${c.steps}`;
+    e.coachTitle.textContent = c.title;
+    e.coachText.innerHTML = c.text;
+    e.coach.classList.remove('show');
+    void e.coach.offsetWidth; // restart the CSS animation
+    e.coach.classList.add('show');
+    this.coachProgress(c.progress);
+  }
+
+  coachProgress(v) {
+    const e = this.el;
+    e.coachBar.hidden = v === null;
+    if (v !== null) e.coachFill.style.width = Math.round(v * 100) + '%';
+  }
+
+  // The shift's policies, as small icons under the clock (names on hover or long press).
+  showPolicies(pol) {
+    const e = this.el.policies;
+    e.hidden = !pol.ids.length && !pol.hardcore;
+    e.innerHTML = e.hidden
+      ? ''
+      : (pol.hardcore ? `<span class="pol hc" title="Hardcore: ${HARDCORE.desc}">${icon('hardcore', 16)}</span>` : '') +
+        pol.ids.map((id) => `<span class="pol ${POLICIES[id].group}" title="${POLICIES[id].name}: ${POLICIES[id].desc}">${icon(POLICIES[id].icon, 16)}</span>`).join('') +
+        `<b class="pol-mult">${fmtMult(pol.mult)}</b>`;
+  }
+
   set(key, value, apply) {
     if (this.cache[key] === value) return;
     this.cache[key] = value;
@@ -116,14 +155,15 @@ export class Hud {
     this.set('time', Math.floor(sim.time), (v) => (e.timer.textContent = fmtTime(v)));
     // Overtime: a countdown to the first ramp-up during the grace period, then the level.
     const ot = sim.spawner.overtimeLevel(sim);
-    const graceLeft = Math.ceil(SHIFT_LENGTH + OVERTIME.grace - sim.time);
+    const graceLeft = Math.ceil(SHIFT_LENGTH + (sim.policy.otGrace ?? OVERTIME.grace) - sim.time);
     // Numbers as cache keys, so nothing is built per frame: 0 in the shift, then -seconds of
-    // grace left, then the overtime level.
-    const shift = sim.time < SHIFT_LENGTH ? 0 : ot || -graceLeft;
+    // grace left, then the overtime level, and -1e9 for the whole training shift.
+    const shift = sim.tutorial ? -1e9 : sim.time < SHIFT_LENGTH ? 0 : ot || -graceLeft;
     this.set('overtime', shift, (v) => {
-      e.shift.textContent = v === 0 ? 'SHIFT ENDS ' + fmtTime(SHIFT_LENGTH) : ot ? `OVERTIME x${ot}` : 'OVERTIME · HARDER IN ' + fmtTime(graceLeft);
-      e.shift.classList.toggle('over', v !== 0);
+      e.shift.textContent = v === -1e9 ? 'TRAINING SHIFT' : v === 0 ? 'SHIFT ENDS ' + fmtTime(SHIFT_LENGTH) : ot ? `OVERTIME x${ot}` : 'OVERTIME · HARDER IN ' + fmtTime(graceLeft);
+      e.shift.classList.toggle('over', v !== 0 && v !== -1e9);
     });
+    this.set('policy', sim.policy, (pol) => this.showPolicies(pol));
     const hp = Math.max(0, Math.ceil(p.hp));
     this.set('hp', hp * 1e5 + p.maxHp, () => {
       e.hp.style.width = Math.min(100, (hp / p.maxHp) * 100) + '%';
