@@ -299,7 +299,8 @@ export function markEnemy(e, seconds, amp) {
   if (seconds > e.mark) e.mark = seconds;
 }
 
-// `weapon` is the tool that closed it, if any.
+// `weapon` is the tool that closed it, if any (Remote Wipe pulls the ticket straight to you;
+// Golden Record keeps the XP and drops one merged ticket per blast).
 export function killEnemy(game, e, weapon) {
   e.dead = true;
   const combo = game.score.onKill();
@@ -309,8 +310,12 @@ export function killEnemy(game, e, weapon) {
     game.sfx('combo');
   }
   if (e.xp > 0) {
-    const t = dropTicket(game, e.x, e.y, e.xp * e.tagXp);
-    if (weapon?.def.vacuum) t.magnet = true; // Remote Wipe sends the ticket straight to you
+    const xp = e.xp * e.tagXp;
+    if (weapon?.def.merge) weapon.mergeXp += xp;
+    else {
+      const t = dropTicket(game, e.x, e.y, xp);
+      if (weapon?.def.vacuum) t.magnet = true;
+    }
   }
   game.burst(e.x, e.y, e.def.particle, 6);
   game.sfx('pop', e.x);

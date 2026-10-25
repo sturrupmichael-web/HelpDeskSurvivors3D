@@ -35,6 +35,7 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, sound and music volume, screen shake, damage numbers, vibration, camera tilt and distance, playtest helpers |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
 | 3 | Playtest: add the next tool |
+| T | Playtest: swap your newest tool for the next one in the toolbox (to try every tool in turn) |
 | 4 | Playtest: skip ahead 1 minute |
 | 5 | Playtest: god mode on/off |
 | 6 | Playtest: clear users |
@@ -87,9 +88,12 @@ Rules that keep this working:
 - Users are drawn with one `InstancedMesh` per kind plus one instanced blob shadow. A user
   whose behavior hasn't been ported yet is left out of the spawn mix (`src/sim/spawner.js`),
   and a user with no model yet is warned about once in the console and not drawn.
-- Tools work the same way: `src/sim/weapons/index.js` lists the ported behaviors, and only
-  those tools are offered (`weaponReady`). Projectiles share one pool and are drawn with one
-  `InstancedMesh` per sprite id; a projectile with no model yet is drawn as a small cube.
+- Tools work the same way: `src/sim/weapons/index.js` lists the ported behaviors (all 21 of
+  the original's), and only those tools are offered (`weaponReady`). Projectiles share one
+  pool and are drawn with one `InstancedMesh` per sprite id; a projectile with no model yet is
+  drawn as a small cube. `src/render/weapons.js` draws projectiles, shockwaves, auras and
+  shields; `src/render/tools.js` draws the rest (lightning, beams, radar, puddles, zip ties,
+  grids, ducks, turrets, helpers) through a few shared instanced batches.
 
 ## Tests
 

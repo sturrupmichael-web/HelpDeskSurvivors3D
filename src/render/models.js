@@ -649,6 +649,9 @@ export const PROJECTILE_MODELS = {
     cyl(0.15, 0.15, 0.074, P.o, 0, -0.03, 0, 12),
     cyl(0.05, 0.05, 0.078, P.r, 0, -0.03, 0, 6),
   ]),
+  // PowerShell Script and Scheduled Task Army bolts: little glowing pellets.
+  proj_bolt: () => merge([ball(0.16, P.k, 0, 0, 0, 1), ball(0.13, P.B, 0, 0.02, 0.03, 1)]),
+  proj_bolt_evo: () => merge([ball(0.16, P.k, 0, 0, 0, 1), ball(0.13, P.e, 0, 0.02, 0.03, 1)]),
   // Firewall: a block of bricks, standing, its face toward +Z.
   proj_firewall: () => {
     const W = 0.9;
@@ -665,6 +668,102 @@ export const PROJECTILE_MODELS = {
     }
     return merge(parts);
   },
+};
+
+// --- Tool props -----------------------------------------------------------------------
+// What some tools put on the floor or send after users, keyed by the original sprite id
+// (or a name of our own where the original drew it by hand). Built facing +z, feet at
+// y = 0 unless noted.
+
+// A Delegate helper: a pint-sized tech (the original's 16 x 16 sprite) in the team polo
+// with a lanyard and badge. The Outsourced Team wears the contractor's orange.
+function helper(top, hair, lanyard) {
+  const parts = person({ hair, top, pants: P.n });
+  parts.push(capsule(0.016, 0.2, lanyard, -0.07, 0.8, 0.255, -0.35, 0.25));
+  parts.push(capsule(0.016, 0.2, lanyard, 0.07, 0.8, 0.255, -0.35, -0.25));
+  parts.push(rotBox(0.13, 0.16, 0.03, P.w, 0, 0.66, 0.285));
+  const g = merge(parts);
+  g.scale(0.72, 0.72, 0.72);
+  return g;
+}
+
+// A PowerShell Script: a terminal on a tripod, its prompt on the screen.
+function terminal(screen) {
+  const parts = [];
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+    parts.push(capsule(0.025, 0.42, P.k, Math.sin(a) * 0.14, 0.22, Math.cos(a) * 0.14, -Math.cos(a) * 0.35, Math.sin(a) * 0.35));
+  }
+  parts.push(cyl(0.05, 0.05, 0.2, P.G, 0, 0.4, 0, 6));
+  parts.push(box(0.86, 0.5, 0.16, P.k, 0, 0.58, 0));
+  parts.push(box(0.76, 0.4, 0.02, screen, 0, 0.63, 0.08));
+  // ">_" in white.
+  parts.push(rotBox(0.12, 0.035, 0.02, P.w, -0.26, 0.88, 0.095, 0, 0, -0.6));
+  parts.push(rotBox(0.12, 0.035, 0.02, P.w, -0.26, 0.81, 0.095, 0, 0, 0.6));
+  parts.push(rotBox(0.16, 0.035, 0.02, P.w, -0.06, 0.76, 0.095));
+  return merge(parts);
+}
+
+export const TOOL_MODELS = {
+  helper: () => helper(P.b, P.y, P.y),
+  helper_evo: () => helper(P.o, P.k, P.k),
+  turret: () => terminal(P.b),
+  turret_evo: () => terminal(P.e),
+  // Rubber Duck: yellow, orange beak, centered a little above the floor.
+  duck: () => merge([
+    sphere(0.26, P.y, 0, 0.2, -0.04, 1, 0.75, 1.25, 9, 6),
+    sphere(0.16, P.y, 0, 0.44, 0.14, 1, 1, 1, 8, 6),
+    shaped(new THREE.ConeGeometry(0.07, 0.16, 5), P.o, 0, 0.42, 0.33, Math.PI / 2, 0, 0, 1.3, 1, 0.6),
+    sphere(0.03, P.k, -0.08, 0.5, 0.26),
+    sphere(0.03, P.k, 0.08, 0.5, 0.26),
+    sphere(0.1, P.y, 0, 0.3, -0.3, 1, 0.8, 1), // tail
+  ]),
+  // Zip Ties: a loop of cable tie lying on the floor (unit radius, the renderer scales it),
+  // with its ratchet head and the loose tail.
+  ziptie: () => {
+    const loop = new THREE.TorusGeometry(1, 0.07, 4, 20);
+    loop.rotateX(Math.PI / 2);
+    loop.scale(1, 1, 0.55);
+    const shine = new THREE.TorusGeometry(1, 0.035, 3, 10, Math.PI * 0.9);
+    shine.rotateX(-Math.PI / 2);
+    shine.scale(1, 1, 0.55);
+    return merge([
+      paint(loop, P.g, 0, 0.05, 0),
+      paint(shine, P.w, 0, 0.1, 0, 0, Math.PI * 0.05),
+      box(0.3, 0.14, 0.3, P.k, 1, 0, 0),
+      box(0.2, 0.15, 0.2, P.w, 1, 0, 0),
+      box(0.4, 0.06, 0.1, P.w, 1.3, 0, 0),
+    ]);
+  },
+  // Screen Share: the slide everyone is squinting at, standing on end (centered).
+  slide: () => merge([
+    rotBox(1.1, 0.8, 0.05, P.k, 0, 0, 0),
+    rotBox(1.0, 0.7, 0.06, P.w, 0, 0, 0),
+    rotBox(0.84, 0.16, 0.07, P.B, 0, 0.2, 0),
+    rotBox(0.58, 0.06, 0.07, P.g, -0.13, -0.02, 0),
+    rotBox(0.42, 0.06, 0.07, P.g, -0.21, -0.16, 0),
+  ]),
+};
+
+// What's wrong with a user, floating over their head (centered on its origin): stunned
+// (two "awaiting approval" sparkles), confused (Password Expired's "?") and flagged (the
+// Rubber Duck's and the SIEM's orange tag).
+export const STATUS_MODELS = {
+  stun: () => merge([
+    paint(new THREE.OctahedronGeometry(0.1), P.y, -0.16, 0, 0),
+    paint(new THREE.OctahedronGeometry(0.08), P.w, 0.16, 0.08, 0),
+  ]),
+  confuse: () => merge([
+    rotBox(0.2, 0.06, 0.06, P.p, 0, 0.17, 0),
+    rotBox(0.06, 0.12, 0.06, P.p, 0.08, 0.1, 0),
+    rotBox(0.12, 0.06, 0.06, P.p, 0.04, 0.03, 0),
+    rotBox(0.06, 0.08, 0.06, P.p, 0, -0.03, 0),
+    rotBox(0.06, 0.06, 0.06, P.p, 0, -0.17, 0),
+  ]),
+  mark: () => merge([
+    rotBox(0.04, 0.34, 0.04, P.k, -0.1, 0, 0),
+    rotBox(0.2, 0.14, 0.04, P.o, 0.02, 0.09, 0),
+  ]),
 };
 
 // --- Pickups ---------------------------------------------------------------------------

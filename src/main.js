@@ -95,6 +95,9 @@ function playtest(act) {
     const w = sim.debugAddWeapon();
     if (w) banner.show(w.def.name.toUpperCase(), w.def.desc, 2);
     else banner.show('NO MORE TOOLS', p.weapons.length >= p.maxWeapons ? 'Every tool slot is full.' : 'Every tool ported so far is equipped.', 2);
+  } else if (act === 'swap') {
+    const w = sim.debugSwapWeapon();
+    if (w) banner.show(w.def.name.toUpperCase(), w.def.desc, 2);
   } else if (act === 'levelup') {
     sim.debugLevelWeapons();
     banner.show('TOOLS LEVELLED UP', p.weapons.map((w) => `${w.def.name} ${w.level}`).join(' · '), 2.5);
@@ -113,7 +116,7 @@ function playtest(act) {
   } else if (act === 'clear') sim.debugClear();
   else if (act === 'restart') newShift();
 }
-const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyB: 'boss', Equal: 'boss', KeyK: 'hitboss', KeyR: 'restart' };
+const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', KeyT: 'swap', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyB: 'boss', Equal: 'boss', KeyK: 'hitboss', KeyR: 'restart' };
 
 // Keys go to the topmost thing on screen: Settings, then the summary, the cards, the pause
 // menu, and last the floor. F (FPS counter) works everywhere.
