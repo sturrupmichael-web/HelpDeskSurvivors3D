@@ -130,6 +130,93 @@ export function createTechModel() {
   return { root, body, legL, legR, armL, armR };
 }
 
+// --- End-users ----------------------------------------------------------------------
+// The horde is drawn instanced, so each user is one merged geometry (no moving limbs);
+// the renderer makes them waddle and bob as a whole. Built facing +z, feet at y = 0.
+
+// A generic office worker, like the original's shared end-user body: hair, skin, a top
+// (with an optional inner shirt showing at the front), trousers or a skirt.
+function person({ hair, skin = P.s, top, inner = null, pants = P.n, skirt = null, hairStyle = 'short' }) {
+  const parts = [
+    // Shoes and legs (or a skirt over bare legs).
+    box(0.2, 0.1, 0.3, P.k, -0.12, 0, 0.03),
+    box(0.2, 0.1, 0.3, P.k, 0.12, 0, 0.03),
+  ];
+  if (skirt) {
+    parts.push(box(0.13, 0.4, 0.14, skin, -0.12, 0.1, 0), box(0.13, 0.4, 0.14, skin, 0.12, 0.1, 0));
+    parts.push(cyl(0.27, 0.33, 0.36, skirt, 0, 0.44, 0, 7));
+  } else {
+    parts.push(box(0.2, 0.7, 0.22, pants, -0.12, 0.1, 0), box(0.2, 0.7, 0.22, pants, 0.12, 0.1, 0));
+  }
+  parts.push(
+    box(0.54, 0.54, 0.3, top, 0, 0.78, 0), // torso
+    box(0.15, 0.48, 0.18, top, -0.35, 0.82, 0), // arms
+    box(0.15, 0.48, 0.18, top, 0.35, 0.82, 0),
+    box(0.13, 0.12, 0.15, skin, -0.35, 0.72, 0), // hands
+    box(0.13, 0.12, 0.15, skin, 0.35, 0.72, 0),
+    box(0.15, 0.08, 0.15, skin, 0, 1.32, 0), // neck
+    box(0.4, 0.38, 0.36, skin, 0, 1.38, 0), // head
+    box(0.05, 0.07, 0.02, P.k, -0.09, 1.57, 0.18), // eyes
+    box(0.05, 0.07, 0.02, P.k, 0.09, 1.57, 0.18),
+  );
+  if (inner) parts.push(box(0.16, 0.5, 0.02, inner, 0, 0.8, 0.155));
+  if (hairStyle === 'bob') {
+    parts.push(box(0.46, 0.14, 0.42, hair, 0, 1.74, -0.01), box(0.48, 0.34, 0.12, hair, 0, 1.42, -0.17));
+    parts.push(box(0.07, 0.34, 0.36, hair, -0.22, 1.42, -0.02), box(0.07, 0.34, 0.36, hair, 0.22, 1.42, -0.02));
+  } else {
+    parts.push(box(0.44, 0.12, 0.4, hair, 0, 1.74, -0.01), box(0.44, 0.22, 0.1, hair, 0, 1.54, -0.17));
+  }
+  return parts;
+}
+
+// One builder per user sprite id (data/enemies.js `sprite`). Each returns merged geometry.
+export const USER_MODELS = {
+  // Password Reset Pam: purple cardigan over a white blouse, grey skirt, brown bob, waving
+  // a yellow sticky note (her password, probably).
+  pam: () => {
+    const parts = person({ hair: P.h, top: P.p, inner: P.w, skirt: P.G, hairStyle: 'bob' });
+    parts.push(rotBox(0.15, 0.42, 0.18, P.p, 0.4, 1.32, 0.05, 0, 0, -0.5)); // raised arm
+    parts.push(box(0.26, 0.26, 0.03, P.y, 0.56, 1.5, 0.08)); // sticky note
+    return merge(parts);
+  },
+  // "Quick Question" Quinn: green cardigan, blond, a speech bubble with a question mark.
+  quinn: () => {
+    const parts = person({ hair: P.y, top: P.e, inner: P.w });
+    const bx = 0.42;
+    const by = 2.05;
+    parts.push(box(0.56, 0.46, 0.08, P.w, bx, by, 0)); // bubble
+    parts.push(box(0.12, 0.12, 0.08, P.w, bx - 0.14, by - 0.1, 0)); // tail
+    // The "?" in dark blocks on the bubble's front.
+    parts.push(box(0.2, 0.06, 0.02, P.k, bx, by + 0.34, 0.05));
+    parts.push(box(0.06, 0.1, 0.02, P.k, bx + 0.08, by + 0.24, 0.05));
+    parts.push(box(0.1, 0.06, 0.02, P.k, bx + 0.02, by + 0.2, 0.05));
+    parts.push(box(0.06, 0.06, 0.02, P.k, bx, by + 0.08, 0.05));
+    return merge(parts);
+  },
+  // Reply-All Randy: white shirt, red tie, black hair, holding up an envelope.
+  randy: () => {
+    const parts = person({ hair: P.k, skin: P.S, top: P.w, inner: P.r });
+    parts.push(rotBox(0.15, 0.42, 0.18, P.w, 0.4, 1.32, 0.05, 0, 0, -0.5));
+    parts.push(box(0.4, 0.28, 0.04, P.w, 0.56, 1.46, 0.08)); // envelope
+    parts.push(rotBox(0.27, 0.03, 0.02, P.k, 0.49, 1.66, 0.11, 0, 0, -0.55)); // flap
+    parts.push(rotBox(0.27, 0.03, 0.02, P.k, 0.63, 1.66, 0.11, 0, 0, 0.55));
+    return merge(parts);
+  },
+  // Reply-All Reply: a pint-sized Randy (the original's 16 x 16 sprite).
+  randy_small: () => {
+    const g = merge(person({ hair: P.k, skin: P.s, top: P.w, inner: P.r }));
+    g.scale(0.6, 0.6, 0.6);
+    return g;
+  },
+};
+
+// A soft round shadow on the floor, for the horde (and for the tech when shadows are off).
+export function blobShadowGeometry(radius = 0.42) {
+  const g = new THREE.CircleGeometry(radius, 14);
+  g.rotateX(-Math.PI / 2);
+  return g;
+}
+
 // --- Office furniture ---------------------------------------------------------------
 // Each builder takes a prop from the simulation's layout (src/sim/floor.js, world px)
 // and appends geometry in scene units to `out`. A chunk's parts are merged into one mesh.

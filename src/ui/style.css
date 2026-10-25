@@ -106,3 +106,34 @@ kbd {
 }
 .stick-base { width: 100px; height: 100px; background: rgba(244, 244, 244, 0.18); border: 2px solid rgba(244, 244, 244, 0.25); }
 .stick-knob { width: 45px; height: 45px; background: rgba(244, 244, 244, 0.55); }
+.panel .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.panel .grid button { text-align: left; font-size: 14px; }
+
+.banner {
+  position: absolute;
+  top: calc(max(8px, env(safe-area-inset-top)) + 64px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(26, 28, 44, 0.86);
+  border: 1px solid rgba(255, 205, 117, 0.45);
+  text-align: center;
+  pointer-events: none !important;
+}
+.banner b { display: block; font-size: 22px; letter-spacing: 0.06em; color: var(--yellow); text-wrap: balance; }
+.banner span { display: block; margin-top: 4px; color: var(--grey); text-wrap: balance; }
+
+.clock {
+  position: absolute;
+  top: max(14px, calc(env(safe-area-inset-top) + 6px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(26, 28, 44, 0.7);
+  font: 600 15px/1.4 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none !important;
+}
