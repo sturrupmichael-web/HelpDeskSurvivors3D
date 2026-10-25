@@ -6,7 +6,7 @@ import { FOOT, hurtPlayer } from '../src/sim/player.js';
 import { assert } from './harness.mjs';
 import { WEAPONS } from '../data/weapons.js';
 import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
-import { spawnEnemy } from '../src/sim/enemies.js';
+import { spawnEnemy, damageEnemy } from '../src/sim/enemies.js';
 import { ENEMIES } from '../data/enemies.js';
 
 const STEP = 1 / 60;
@@ -335,5 +335,128 @@ tests.push(
     spawnEnemy(sim, 'brenda', p.x + 30, p.y);
     run(sim, STEP * 2, still);
     assert(p.slow < 1, `slow ${p.slow}`);
+  }],
+);
+
+// --- Milestone 8: bosses and clocking out ----------------------------------------------
+
+import { EVENTS } from '../data/waves.js';
+
+// A boss fight on a bare floor: the boss `d` px to the right, and nothing else spawning.
+function bossArena(id, d = 200) {
+  const sim = arena(null, 0);
+  const p = sim.player;
+  const e = spawnEnemy(sim, id, p.x + d, p.y);
+  sim.setBoss(e);
+  return [sim, e];
+}
+
+tests.push(
+  ['the Major Incident turns up at 10:00 and the Executive at 20:00', () => {
+    const sim = new Sim();
+    sim.player.god = true;
+    for (const id of ['incident', 'executive']) {
+      const ev = EVENTS.find((e) => e.boss === id);
+      sim.spawner.nextEvent = EVENTS.indexOf(ev);
+      sim.time = ev.t - 0.01;
+      run(sim, STEP * 3, still);
+      assert(sim.bossAlive() && sim.boss.def === ENEMIES[id], `no ${id} at ${ev.t}`);
+      sim.boss.dead = true;
+    }
+  }],
+  ['the Major Incident rings with a gap to stand in, and calls in status updates', () => {
+    const [sim, e] = bossArena('incident');
+    e.ai.ringIn = 0;
+    e.ai.minionsIn = 0;
+    run(sim, STEP, still);
+    assert(e.ai.state === 1, `state ${e.ai.state}`);
+    const gap = e.ai.gapAngle;
+    run(sim, e.params.ringTelegraph + STEP * 2, still);
+    const bl = sim.hazards.bullets;
+    assert(bl.count > 10, `${bl.count} phones`);
+    const half = (e.params.ringGap * Math.PI) / e.params.ringBullets;
+    for (let i = 0; i < bl.count; i++) {
+      let rel = Math.atan2(bl.items[i].vy, bl.items[i].vx) - gap;
+      rel -= Math.round(rel / (Math.PI * 2)) * Math.PI * 2;
+      assert(Math.abs(rel) >= half - 1e-6, `a phone flew through the gap (${rel.toFixed(2)})`);
+    }
+    assert(countOf(sim, 'status_update') >= e.params.minionCount, `${countOf(sim, 'status_update')} status updates`);
+  }],
+  ['a ringing phone hurts the tech', () => {
+    const [sim] = bossArena('incident', 400);
+    const p = sim.player;
+    p.god = false;
+    sim.hazards.bullet(p.x - 30, p.y, 0, 100, 10, 'hazard_phone');
+    run(sim, 0.5, still);
+    assert(p.hp < p.maxHp, `sanity ${p.hp}`);
+    assert(sim.hazards.bullets.count === 0, 'the phone kept flying');
+  }],
+  ['at half health the Major Incident goes SEV 0', () => {
+    const banners = [];
+    const [sim, e] = bossArena('incident');
+    sim.banner = (t) => banners.push(t);
+    e.hp = e.maxHp * 0.49;
+    run(sim, STEP, still);
+    assert(e.angry && sim.bossPhase2, 'not enraged');
+    assert(banners.includes('SEV 0'), banners.join());
+  }],
+  ['a non-final boss drops a Change Approved chest', () => {
+    const [sim, e] = bossArena('incident');
+    damageEnemy(sim, e, e.hp + 1, null, 0, 0, 0);
+    assert(!sim.bossAlive(), 'still alive');
+    let chests = 0;
+    for (let i = 0; i < sim.items.count; i++) if (sim.items.items[i].id === 'chest') chests++;
+    assert(chests === 1, `${chests} chests`);
+    assert(!sim.victoryT, 'the Incident ended the shift');
+  }],
+  ['the Executive escalates through its phases', () => {
+    const banners = [];
+    const [sim, e] = bossArena('executive');
+    sim.banner = (t) => banners.push(t);
+    e.hp = e.maxHp * 0.6;
+    run(sim, STEP, still);
+    assert(e.ai.phase === 1 && banners.includes('ESCALATED'), `phase ${e.ai.phase} ${banners}`);
+    e.hp = e.maxHp * 0.3;
+    run(sim, STEP, still);
+    assert(e.ai.phase === 2 && sim.bossPhase2 && banners.includes('FINAL PHASE'), `phase ${e.ai.phase} ${banners}`);
+  }],
+  ['the Executive charges down its lane and its meetings go off', () => {
+    const [sim, e] = bossArena('executive', 150);
+    const p = sim.player;
+    p.god = false;
+    // Charge: locked on to the tech, so standing still gets you hit.
+    e.ai.attackIn = 0;
+    e.params = { ...e.params, attacks: [['charge']] };
+    run(sim, STEP, still);
+    assert(e.ai.state === 1, `state ${e.ai.state}`);
+    run(sim, e.params.charge.telegraph + e.params.charge.time, still);
+    assert(p.hp < p.maxHp, 'the charge missed a tech standing still');
+    // Calendar Tetris: a 5 x 5 checkerboard of meetings round the tech.
+    p.hp = p.maxHp;
+    p.invuln = 0;
+    sim.hazards.clear();
+    e.ai.state = 0;
+    e.ai.attackIn = 0;
+    e.ai.lastAttack = '';
+    e.params = { ...e.params, attacks: [['calendar']] };
+    run(sim, STEP, still);
+    const c = e.params.calendar;
+    assert(sim.hazards.bombs.count === c.size * c.size, `${sim.hazards.bombs.count} meetings`);
+    run(sim, c.delay2 + STEP * 2, still);
+    assert(sim.hazards.bombs.count === 0, 'meetings left over');
+    assert(p.hp < p.maxHp, 'standing in a meeting did no harm');
+  }],
+  ['closing the Executive clocks you out', () => {
+    const [sim, e] = bossArena('executive');
+    const p = sim.player;
+    for (let i = 0; i < 30; i++) spawnEnemy(sim, 'pam', p.x - 100, p.y + i);
+    sim.time = 1250;
+    damageEnemy(sim, e, e.hp + 1, null, 0, 0, 0);
+    assert(sim.victoryT > 0 && sim.spawner.stopped, 'the shift did not end');
+    run(sim, STEP * 2, still);
+    assert(sim.enemies.count === 0, `${sim.enemies.count} users still on the floor`);
+    assert(!sim.over, 'the summary came up straight away');
+    run(sim, 4, still);
+    assert(sim.over?.won === true, 'not won');
   }],
 );

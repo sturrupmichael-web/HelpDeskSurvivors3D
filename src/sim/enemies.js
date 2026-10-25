@@ -1,12 +1,13 @@
 // End-user horde: pooled enemy objects, movement via behaviors, separation, contact
 // damage, damage and death. Ported from the original's src/game/enemies.js with the
-// drawing removed. Not yet ported (they return with their milestones): score and combos
-// (5), map twists, Shift Policies and boss phases.
+// drawing removed. Not yet ported (they return with their milestones): map twists and
+// Shift Policies.
 
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
 import { hurtPlayer, FOOT } from './player.js';
 import { dropTicket, rollItemDrops } from './pickups.js';
+import { angryTick } from './behaviors/phase2.js';
 
 export const HIT_SLOTS = 8; // per-weapon "last hit" timestamps for damage-over-time weapons
 const DEFAULT_FOOT = 10;
@@ -35,6 +36,8 @@ export function makeEnemy() {
     t0: 0, t1: 0, n: 0, // scratch for regular users' behaviors (timers, a flag)
     ai: null, // a boss's own named state, made by its behavior's init() each fight
     heavy: false, // bosses (and anchored boxes): the horde can't shove them around
+    angry: false, angryT: 0, // a boss in its second phase (behaviors/phase2.js), and its ember timer
+    anim: 'walk', pose: -1, // what a boss is doing, for the renderer: 'walk' or 'attack', and which attack pose
     scale: 1, // drawn size
     hitAt: new Float64Array(HIT_SLOTS),
   };
@@ -74,6 +77,10 @@ export function spawnEnemy(game, id, x, y, hpMult = 1, speedMult = 1, behaviorId
   e.n = 0;
   e.ai = null;
   e.heavy = !!def.boss || !!def.anchored;
+  e.angry = false;
+  e.angryT = 0;
+  e.anim = 'walk';
+  e.pose = -1;
   e.scale = 1;
   e.hitAt.fill(-1e9);
   // Face the player from the start.
@@ -122,6 +129,7 @@ export function updateEnemies(game, dt) {
     e.buff = 1;
     e.animT += dt;
     if (e.flash > -1) e.flash -= dt;
+    if (e.angry) angryTick(e, game, dt);
   }
 }
 
@@ -307,6 +315,7 @@ export function killEnemy(game, e, weapon) {
   game.burst(e.x, e.y, e.def.particle, 6);
   game.sfx('pop', e.x);
   rollItemDrops(game, e);
+  if (e.def.boss) game.onBossDown(e);
   const od = e.def.onDeath;
   if (od) {
     const hpMult = game.spawner.sample(game.time, 'hpMult');

@@ -1,9 +1,9 @@
 // In-run HUD as HTML over the canvas: XP bar, shift clock, sanity, tool and passive slots,
-// tickets closed and CSAT, the event banner, a pause button, and an arrow at the screen
-// edge pointing to an off-screen Change Approved chest.
+// tickets closed and CSAT, the event banner, the boss bar, a pause button, and an arrow at
+// the screen edge pointing to an off-screen Change Approved chest.
 // Ported from the original's src/ui/hud.js. Values are cached so the DOM is only touched
-// when something changes. Not yet ported: Shift Policies, the boss bar, the training
-// coach and achievement toasts.
+// when something changes. Not yet ported: Shift Policies, the training coach and
+// achievement toasts.
 
 import { icon } from './icons.js';
 import { SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
@@ -39,7 +39,11 @@ export class Hud {
         <div class="muted" hidden>MUTED <kbd>M</kbd></div>
       </div>
       <div class="hud-banner" hidden><b></b><span></span></div>
-      <div class="edge-arrow" hidden></div>`;
+      <div class="edge-arrow" hidden></div>
+      <div class="hud-boss" hidden>
+        <div class="boss-name"></div>
+        <div class="boss-bar"><i class="boss-fill"></i></div>
+      </div>`;
     this.pauseButton = document.createElement('button');
     this.pauseButton.className = 'hud-pause';
     this.pauseButton.setAttribute('aria-label', 'Pause');
@@ -53,6 +57,7 @@ export class Hud {
       kills: q('.kills'), csat: q('.csat'), mult: q('.mult'),
       weapons: q('.weapons'), passives: q('.passives'),
       banner: q('.hud-banner'), arrow: q('.edge-arrow'), muted: q('.muted'),
+      boss: q('.hud-boss'), bossName: q('.boss-name'), bossFill: q('.boss-fill'),
     };
     this.cache = {};
     this.bannerT = 0;
@@ -115,6 +120,14 @@ export class Hud {
     this.set('csat', s.csat, (v) => (e.csat.textContent = v.toLocaleString()));
     this.set('mult', s.mult, (v) => (e.mult.textContent = v > 1 ? `x${v} STREAK` : ''));
     this.set('slots', slotKey(p), () => this.refreshSlots(p));
+    // The boss bar: what's left of the whole fight, orange and ENRAGED in its second phase.
+    const boss = sim.bossAlive() && !sim.over ? sim.boss : null;
+    this.set('bossOn', boss ? boss.uid : 0, () => {
+      e.boss.hidden = !boss;
+      if (boss) e.bossName.textContent = boss.def.name;
+    });
+    this.set('bossAngry', !!boss && sim.bossPhase2, (v) => e.boss.classList.toggle('angry', v));
+    if (boss) this.set('bossHp', Math.ceil(sim.bossHpFrac() * 400), (v) => (e.bossFill.style.width = v / 4 + '%'));
     this.edgeArrow(sim, view);
   }
 

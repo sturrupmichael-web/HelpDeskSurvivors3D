@@ -386,6 +386,13 @@ export const USER_MODELS = {
     parts.push(sphere(0.035, P.r, 0.56, 1.36, 0.11)); // its reader light
     return merge(parts);
   },
+  // Status Update Request (the Major Incident's minions): a yellow chat bubble with
+  // "..." on it, hopping along at knee height.
+  status_update: () => merge([
+    sphere(0.32, P.y, 0, 0.42, 0, 1, 0.62, 0.42, 10, 6),
+    shaped(new THREE.ConeGeometry(0.08, 0.2, 5), P.y, -0.14, 0.18, 0, 0, 0, 2.7), // tail
+    ...[-0.13, 0, 0.13].map((x) => sphere(0.045, P.k, x, 0.43, 0.12, 1, 1, 0.6, 5, 3)),
+  ]),
   // Unclaimed Moving Box (Merger Day): taped up, labeled, waiting to be smashed open.
   moving_box: () => merge([
     box(0.9, 0.62, 0.78, P.d, 0, 0, 0),
@@ -396,6 +403,179 @@ export const USER_MODELS = {
     box(0.16, 0.025, 0.012, P.k, -0.24, 0.33, 0.4),
   ]),
 };
+
+// --- Bosses ---------------------------------------------------------------------------
+// Bosses are few, so each gets a real model with moving parts (src/render/bosses.js poses
+// them), built at chibi scale and grown by BOSS_SCALE. Each has a material of its own so
+// it can flash when hit (its emissive color), and its lights are unlit so they glow.
+
+export const BOSS_SCALE = { executive: 2.1, incident: 1.35 };
+
+const glow = (color) => new THREE.MeshBasicMaterial({ color });
+
+// The Executive Who Needs It Fixed Before The Board Meeting: navy suit, red tie, grey
+// hair, angry brows, a briefcase in the left hand. The right arm has three poses (phone
+// held down, pointing at you, phone raised), and the mouth frowns or shouts.
+// Returns { root, body, legL, legR, arms: [down, point, phone], mouths: [frown, shout], material }.
+export function createExecutiveModel() {
+  const material = toonMaterial.clone();
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const mesh = (geo) => {
+    const m = new THREE.Mesh(geo, material);
+    m.castShadow = true;
+    return outlined(m);
+  };
+  const leg = (side) => {
+    const g = new THREE.Group();
+    g.position.set(side * 0.11, 0.5, 0);
+    g.add(mesh(merge([capsule(0.1, 0.24, P.n, 0, -0.22, 0), sphere(0.12, P.K, 0, -0.44, 0.05, 1, 0.6, 1.35)])));
+    body.add(g);
+    return g;
+  };
+  const legL = leg(-1);
+  const legR = leg(1);
+  const shoulder = (geo) => {
+    const g = new THREE.Group();
+    g.position.set(0.3, 0.88, 0);
+    g.add(mesh(geo));
+    body.add(g);
+    return g;
+  };
+  const phone = (x, y, z) => [rotBox(0.09, 0.2, 0.05, P.K, x, y, z), rotBox(0.06, 0.13, 0.02, P.B, x, y, z + 0.03)];
+  const arms = [
+    // Down by the side, phone in hand.
+    shoulder(merge([capsule(0.08, 0.3, P.n, 0.04, -0.2, 0, 0, 0.15), sphere(0.075, P.s, 0.08, -0.42, 0.02), ...phone(0.09, -0.5, 0.06)])),
+    // Pointing straight at you.
+    shoulder(merge([capsule(0.08, 0.34, P.n, 0.02, 0, 0.24, Math.PI / 2), sphere(0.075, P.s, 0.02, 0, 0.5), capsule(0.025, 0.1, P.s, 0.02, 0.01, 0.6, Math.PI / 2)])),
+    // Phone raised over the head, shouting into it.
+    shoulder(merge([capsule(0.08, 0.32, P.n, 0.06, 0.24, 0, 0, -0.2), sphere(0.075, P.s, 0.1, 0.46, 0.02), ...phone(0.1, 0.6, 0.04)])),
+  ];
+  const parts = [
+    lathe(TORSO, P.n), // suit jacket
+    shaped(new THREE.ConeGeometry(0.12, 0.3, 3), P.w, 0, 0.84, 0.21, 0, 0, Math.PI, 1, 1, 0.45), // shirt
+    capsule(0.04, 0.26, P.r, 0, 0.74, 0.27, -0.2), // tie
+    rotBox(0.03, 0.26, 0.02, P.k, -0.08, 0.82, 0.26, -0.25, 0, 0.35), // lapels
+    rotBox(0.03, 0.26, 0.02, P.k, 0.08, 0.82, 0.26, -0.25, 0, -0.35),
+    // Left arm with the briefcase.
+    capsule(0.08, 0.3, P.n, -0.34, 0.68, 0, 0, -0.15),
+    sphere(0.075, P.s, -0.38, 0.47, 0.02),
+    box(0.44, 0.32, 0.14, P.h, -0.4, 0.12, 0.02),
+    box(0.06, 0.05, 0.15, P.y, -0.4, 0.3, 0.02), // clasp
+    paint(new THREE.TorusGeometry(0.07, 0.02, 4, 8, Math.PI), P.k, -0.4, 0.44, 0.02),
+  ];
+  head(parts, P.s, P.G, 'short');
+  parts.push(
+    rotBox(0.11, 0.03, 0.03, P.k, -0.11, HEAD_Y + 0.1, HEAD_R * 0.93, 0, 0, -0.45), // angry brows
+    rotBox(0.11, 0.03, 0.03, P.k, 0.11, HEAD_Y + 0.1, HEAD_R * 0.93, 0, 0, 0.45),
+  );
+  body.add(mesh(merge(parts)));
+  const mouth = (geo) => {
+    const m = new THREE.Mesh(geo, material);
+    body.add(m);
+    return m;
+  };
+  const mouths = [
+    mouth(rotBox(0.12, 0.025, 0.03, P.k, 0, HEAD_Y - 0.13, HEAD_R * 0.9, 0, 0, 0)),
+    mouth(merge([sphere(0.07, P.k, 0, HEAD_Y - 0.14, HEAD_R * 0.86, 1, 0.75, 0.5, 6, 4), sphere(0.045, P.r, 0, HEAD_Y - 0.16, HEAD_R * 0.9, 1, 0.6, 0.5, 5, 3)])),
+  ];
+  return { root, body, legL, legR, arms, mouths, material };
+}
+
+// Major Incident: a furious conference speakerphone on an AV cart, running the bridge
+// call. The LCD's eyes glare red (yellow when it attacks), LEDs blink round the base, and
+// a siren on top spins. Returns { root, body, eyes, leds, siren, beacon, material }.
+export function createIncidentModel() {
+  const material = toonMaterial.clone();
+  const root = new THREE.Group();
+  const body = new THREE.Group(); // rocks and jumps when it rings
+  root.add(body);
+  const mesh = (geo, mat = material) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = true;
+    return outlined(m);
+  };
+  // The cart: a grey shelf on four castors, pushed by nobody.
+  root.add(mesh(merge([
+    box(1.9, 0.12, 1.5, P.G, 0, 0.32, 0),
+    box(1.8, 0.06, 1.4, P.g, 0, 0.44, 0),
+    ...[[-0.8, -0.6], [0.8, -0.6], [-0.8, 0.6], [0.8, 0.6]].flatMap(([x, z]) => [
+      cyl(0.04, 0.04, 0.22, P.K, x, 0.1, z, 5),
+      sphere(0.1, P.k, x, 0.1, z, 1, 1, 0.7, 6, 4),
+    ]),
+  ])));
+  // The speakerphone: a dark base, a grey grille dome with holes, the LCD on the front.
+  const dome = [
+    cyl(1.05, 1.15, 0.24, P.K, 0, 0.48, 0, 16),
+    shaped(new THREE.SphereGeometry(0.95, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), P.g, 0, 0.7, 0, 0, 0, 0, 1, 0.48, 1),
+    box(0.9, 0.36, 0.1, P.n, 0, 0.66, 0.86), // LCD
+    box(0.98, 0.44, 0.06, P.k, 0, 0.62, 0.83),
+  ];
+  for (let ring = 0; ring < 3; ring++) {
+    const r = 0.35 + ring * 0.22;
+    const n = 6 + ring * 4;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + ring * 0.3;
+      const y = 0.7 + 0.46 * Math.sqrt(Math.max(0, 1 - (r / 0.95) ** 2));
+      if (Math.sin(a) > 0.55 && ring === 2) continue; // keep the LCD clear
+      dome.push(sphere(0.035, P.k, Math.cos(a) * r, y, Math.sin(a) * r, 1, 0.5, 1, 4, 3));
+    }
+  }
+  // The siren on its neck.
+  dome.push(cyl(0.18, 0.24, 0.24, P.G, 0, 1.12, 0, 8));
+  body.add(mesh(merge(dome)));
+  // Lights (unlit, so they glow): the LCD's eyes and mouth, three LEDs, the siren dome.
+  const eyes = new THREE.Mesh(merge([
+    rotBox(0.22, 0.1, 0.04, P.w, -0.2, 0.74, 0.92, 0, 0, -0.3),
+    rotBox(0.22, 0.1, 0.04, P.w, 0.2, 0.74, 0.92, 0, 0, 0.3),
+    rotBox(0.4, 0.05, 0.04, P.w, 0, 0.57, 0.92),
+  ]), glow(P.r));
+  body.add(eyes);
+  const leds = [-0.9, 0, 0.9].map((x, i) => {
+    const led = new THREE.Mesh(box(0.16, 0.08, 0.08, P.w, x * 0.85, 0.52, (i === 1 ? 1.12 : 0.62)), glow(P.y));
+    body.add(led);
+    return led;
+  });
+  const siren = mesh(shaped(new THREE.SphereGeometry(0.3, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), P.w, 0, 1.36, 0), glow(P.r));
+  body.add(siren);
+  // A white flare inside the siren that sweeps round.
+  const beacon = new THREE.Group();
+  beacon.position.y = 1.5;
+  beacon.add(new THREE.Mesh(box(0.08, 0.1, 0.5, P.w, 0, -0.05, 0.12), glow(P.w)));
+  body.add(beacon);
+  return { root, body, eyes, leds, siren, beacon, material };
+}
+
+// --- Boss attacks ----------------------------------------------------------------------
+// What bosses throw, keyed by the hazard's sprite id (src/sim/hazards.js). Centered,
+// pointing along +Z. The renderer outlines them in bright yellow so they stand out from
+// the crowd, as the original did.
+
+export const HAZARD_MODELS = {
+  // A red desk-phone handset, ringing its way toward you.
+  hazard_phone: () => merge([
+    capsule(0.07, 0.42, P.r, 0, 0, 0, Math.PI / 2),
+    cyl(0.15, 0.11, 0.14, P.r, 0, -0.08, -0.27, 8),
+    cyl(0.15, 0.11, 0.14, P.r, 0, -0.08, 0.27, 8),
+    cyl(0.1, 0.1, 0.02, P.k, 0, -0.1, -0.27, 8),
+    cyl(0.1, 0.1, 0.02, P.k, 0, -0.1, 0.27, 8),
+  ]),
+  // A slide deck: a white slide with a red title and a blue bar chart, flying flat.
+  hazard_slide: () => merge([
+    slab(0.82, 0.62, P.k, 0),
+    slab(0.74, 0.54, P.w, 2),
+    slab(0.28, 0.08, P.r, 4, -0.18, -0.17),
+    ...[[-0.2, 0.08], [-0.06, 0.14], [0.08, 0.2], [0.22, 0.26]].map(([x, h]) => slab(0.08, h, P.B, 4, x, 0.2 - h / 2)),
+  ]),
+};
+
+// Boss attacks get a thick bright outline (with the same trick as the ink outlines).
+export const hazardOutlineMaterial = new THREE.MeshBasicMaterial({ color: P.y, side: THREE.BackSide });
+hazardOutlineMaterial.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n    transformed += normal * 0.07;');
+};
+hazardOutlineMaterial.customProgramCacheKey = () => 'hazard-outline';
 
 // --- Projectiles and shields --------------------------------------------------------
 // Keyed by the weapon's `sprite` id from data/weapons.js. Each is centered on its own

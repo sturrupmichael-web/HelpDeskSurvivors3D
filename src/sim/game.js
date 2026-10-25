@@ -11,7 +11,8 @@
 // Level-ups and Change Approved chests stop the floor until the player answers: the
 // simulation sets `choices` (the cards) or `chest` (what a chest gave), skips ticks while
 // either is set, and the page calls `choose(card)` or `closeChest()`. Pausing works the
-// same way (`paused`), and a burnout sets `over` to the run's stats until `newRun()`. The one thing the
+// same way (`paused`), and a burnout, or clocking out after the final boss, sets `over` to
+// the run's stats until `newRun()`. The one thing the
 // page tells the simulation is what part of the floor is on screen (`view`), which the
 // spawner needs, as the original's spawner needed the canvas size.
 
@@ -22,7 +23,7 @@ import { Pool } from '../engine/pool.js';
 import { SpatialHash } from '../engine/spatialHash.js';
 import { Floor } from './floor.js';
 import { createPlayer, updatePlayer, addXp, recomputeStats, FOOT } from './player.js';
-import { makeEnemy, updateEnemies, resolveEnemies, spawnEnemy } from './enemies.js';
+import { makeEnemy, updateEnemies, resolveEnemies, spawnEnemy, damageEnemy } from './enemies.js';
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
 import { Spawner } from './spawner.js';
@@ -36,9 +37,12 @@ import { rollChoices, applyChoice, openChest } from './upgrades.js';
 import { PASSIVES } from '../../data/passives.js';
 import { Score } from './score.js';
 import { Zones } from './zones.js';
+import { Hazards } from './hazards.js';
+import { EVENTS } from '../../data/waves.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
+const VICTORY_DELAY = 3.5; // seconds between closing the final boss and the summary screen
 
 export class Sim {
   // Hooks: sfx(name, x), banner(title, text, seconds), shake(amount),
@@ -66,6 +70,12 @@ export class Sim {
     this.items = new Pool(MAX_ITEMS, makeItem);
     this.score = new Score();
     this.zones = new Zones();
+    this.hazards = new Hazards();
+    this.boss = null; // the boss on the HUD bar (check bossAlive(): pool objects get reused)
+    this.bossUid = 0;
+    this.bossParts = []; // [enemy, uid] for every piece of a boss that splits (the map bosses, later)
+    this.bossMax = 1; // HP of the whole boss fight, for the HUD bar
+    this.bossDef = null;
     // The visible floor around the camera's ground point, in world px: the four screen
     // corners (x, y pairs, clockwise from bottom left), the extents, and the farthest corner.
     this.view = { corners: new Float64Array(8), left: 0, right: 0, top: 0, bottom: 0, radius: 0 };
@@ -111,7 +121,12 @@ export class Sim {
     this.tickets.clear();
     this.items.clear();
     this.zones.clear();
+    this.hazards.clear();
     this.spawner.reset();
+    this.boss = null;
+    this.bossParts.length = 0;
+    this.bossPhase2 = false; // the current fight has reached its second phase (behaviors/phase2.js)
+    this.victoryT = 0; // counting down to the summary after the final boss
     // Start in a clear spot: walk down from the origin until the feet are off furniture.
     const p = this.player;
     while (this.floor.blocked(p.x, p.y + FOOT)) p.y += 8;
@@ -119,10 +134,6 @@ export class Sim {
     p.py = p.y;
   }
 
-  // Bosses come later; the spawner asks.
-  bossAlive() {
-    return false;
-  }
 
   get kills() {
     return this.score.kills;
@@ -161,11 +172,12 @@ export class Sim {
     updateProjectiles(this, dt);
     this.enemies.compact(); // hash indices are stale after this point
     this.zones.update(this, dt);
+    this.hazards.update(this, dt);
     updateTickets(this, dt);
     updateItems(this, dt); // may open a chest
     const comeback = p.hp <= 0 && COMEBACKS.find((c) => p[c.counter] > 0);
     if (comeback) this.revive(comeback);
-    else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest) this.openLevelUp();
+    else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest && this.victoryT <= 0) this.openLevelUp();
     this.score.update(dt);
     // Low sanity: you can hear your pulse.
     if (p.hp > 0 && p.hp < p.maxHp * 0.25 && (this.beatT -= dt) <= 0) {
@@ -173,6 +185,7 @@ export class Sim {
       this.sfx('heartbeat');
     }
     if (p.hp <= 0) this.endRun(false);
+    else if (this.victoryT > 0 && (this.victoryT -= dt) <= 0) this.endRun(true);
   }
 
   // While frozen, everything's previous position is its position, so the renderer's
@@ -181,7 +194,7 @@ export class Sim {
     const p = this.player;
     p.px = p.x;
     p.py = p.y;
-    for (const pool of [this.enemies, this.projectiles, this.tickets, this.items]) {
+    for (const pool of [this.enemies, this.projectiles, this.tickets, this.items, this.hazards.bullets]) {
       for (let i = 0; i < pool.count; i++) {
         const o = pool.items[i];
         o.px = o.x;
@@ -190,8 +203,8 @@ export class Sim {
     }
   }
 
-  // The shift is over: `over` holds what the summary screen shows. Winning needs the
-  // final boss, which comes later.
+  // The shift is over (burned out, or `won` by closing the final boss): `over` holds what
+  // the summary screen shows.
   endRun(won) {
     const p = this.player;
     p.hp = Math.max(0, p.hp);
@@ -220,6 +233,84 @@ export class Sim {
         return { name: d.name, icon: d.icon, desc: d.desc, level, maxLevel: d.maxLevel };
       }),
     };
+  }
+
+  // --- Bosses -------------------------------------------------------------------------
+  setBoss(e) {
+    this.boss = e;
+    this.bossUid = e.uid;
+    this.bossParts.length = 0;
+    this.bossParts.push([e, e.uid]);
+    this.bossMax = e.maxHp;
+    this.bossPhase2 = false;
+    this.bossDef = e.def; // the pieces' pool objects may be reused by the time it's over
+    this.shake(5);
+  }
+
+  // Another piece of the current boss: the fight lasts until every piece is down.
+  addBossPart(e) {
+    this.bossParts.push([e, e.uid]);
+  }
+
+  bossAlive() {
+    const b = this.boss;
+    if (b && !b.dead && b.uid === this.bossUid) return true;
+    // The tracked piece is down: follow another live one, if any.
+    for (const [e, uid] of this.bossParts) {
+      if (e.dead || e.uid !== uid) continue;
+      this.boss = e;
+      this.bossUid = uid;
+      return true;
+    }
+    return false;
+  }
+
+  // HUD bar: what is left of the whole fight (all pieces together).
+  bossHpFrac() {
+    let hp = 0;
+    for (const [e, uid] of this.bossParts) if (!e.dead && e.uid === uid) hp += Math.max(0, e.hp);
+    return Math.min(1, hp / this.bossMax);
+  }
+
+  // Called from killEnemy for any boss.
+  onBossDown(e) {
+    if (this.bossParts.length > 1 && this.bossAlive()) {
+      // One piece of a split boss: the fight goes on.
+      this.shake(4);
+      this.ring(e.x, e.y, 50, '#ffcd75', 0.5, true);
+      this.burst(e.x, e.y - 10, e.def.particle, 20);
+      this.sfx('pop');
+      return;
+    }
+    this.shake(8);
+    this.ring(e.x, e.y, 90, '#ffcd75', 0.6, true);
+    this.ring(e.x, e.y, 120, '#f4f4f4', 0.8);
+    this.burst(e.x, e.y - 20, e.def.particle, 40);
+    this.hazards.clear();
+    if (e.def.final) {
+      // Shift over: everyone else goes home, then the summary screen.
+      this.victoryT = VICTORY_DELAY;
+      this.spawner.stopped = true;
+      this.player.invuln = VICTORY_DELAY + 1;
+      const pool = this.enemies;
+      for (let i = 0; i < pool.count; i++) {
+        const o = pool.items[i];
+        if (o.dead) continue;
+        o.dead = true;
+        if (i < 200) this.burst(o.x, o.y - 6, o.def.particle, 2);
+      }
+      for (let i = 0; i < this.tickets.count; i++) this.tickets.items[i].magnet = true; // bulk close on the way out
+      const [title, text] = e.def.downBanner ?? ['SHIFT COMPLETE', 'Everyone went home.'];
+      this.banner(title, text, VICTORY_DELAY);
+      this.sfx('evolve');
+    } else {
+      // A split boss's last piece (no banner of its own) counts as the whole boss.
+      const def = e.def.downBanner || !this.bossDef ? e.def : this.bossDef;
+      const [title, text] = def.downBanner ?? ['BOSS DOWN', 'Grab the Change Approved.'];
+      this.banner(title, text, 3);
+      dropItem(this, 'chest', e.x, e.y);
+      this.sfx('chest');
+    }
   }
 
   // --- Level-ups, chests, comebacks ---------------------------------------------------
@@ -295,6 +386,23 @@ export class Sim {
       spawnEnemy(this, id, p.x + Math.cos(a) * 140, p.y + Math.sin(a) * 140);
     });
     return ids.length;
+  }
+  // Starts a boss fight right now: the next boss on the timeline, or the Executive.
+  debugBoss() {
+    const bosses = EVENTS.filter((e) => e.type === 'boss');
+    const ev = bosses.find((e) => e.t > this.time) ?? bosses[bosses.length - 1];
+    this.banner(ev.title, ev.text, 3);
+    this.sfx('siren');
+    this.spawner.done.add(ev); // the timeline won't send it again
+    this.spawner.bossEvent(this, ev);
+    return ev;
+  }
+  // Knocks a quarter of its HP off the current boss (to see its phases and the ending).
+  debugHitBoss() {
+    if (!this.bossAlive()) return false;
+    const e = this.boss;
+    damageEnemy(this, e, Math.min(e.hp + 1, e.maxHp * 0.25), null, 0, 0, 0);
+    return true;
   }
   debugSkip(seconds) {
     this.time += seconds;

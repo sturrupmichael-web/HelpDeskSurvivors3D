@@ -42,7 +42,9 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | 8 | Playtest: enough XP for the next level (level-up cards) |
 | 9 | Playtest: drop a Change Approved chest |
 | 0 | Playtest: evolution kit (max tools + paired passives, and a chest) |
-| U | Playtest: one of each user in a ring around you (bosses come in M8) |
+| U | Playtest: one of each user in a ring around you |
+| B (or =) | Playtest: start the next boss fight now (the Major Incident before 10:00, then the Executive) |
+| K | Playtest: knock a quarter of its HP off the boss (to see its phases and the ending) |
 | 1–4 / tap | Pick a level-up card |
 | R | Playtest: start a new shift |
 
@@ -54,10 +56,13 @@ src/engine/    fixed-timestep loop, input, object pool, spatial hash, synthesize
                phone vibration (all ported)
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
                projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
-               (upgrades.js), CSAT score (score.js), floor zones such as paper jams (zones.js), spawner and
-               wave timeline, floor layout and collision. No Three.js, no DOM
+               (upgrades.js), CSAT score (score.js), floor zones such as paper jams (zones.js), boss
+               attacks (hazards.js), spawner and wave timeline, floor layout and collision. No
+               Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
-               tool effects, pickups, floor zones (zones.js), particles (fx.js), models.js (every shape lives here)
+               tool effects, pickups, floor zones (zones.js), bosses and their floor telegraphs (bosses.js), boss
+               bullets and meeting bombs (hazards.js), particles (fx.js), models.js (every shape
+               lives here)
 src/ui/        HTML/CSS overlays: HUD (hud.js), floating numbers and words (floaters.js, a 2D
                canvas), level-up cards and chests, pause menu, end-of-shift summary, settings,
                FPS counter, touch stick (icons.js is the original's pixel icons)
