@@ -210,6 +210,99 @@ export const USER_MODELS = {
   },
 };
 
+// --- Projectiles and shields --------------------------------------------------------
+// Keyed by the weapon's `sprite` id from data/weapons.js. Each is centered on its own
+// origin and points along +Z (the way it flies); the renderer lifts it to hand height.
+// Flat things are stacked slabs, each a hair taller than the one below, so the top
+// layer shows like the original sprite's pixels.
+
+const slab = (w, d, color, layer, x = 0, z = 0) => box(w, 0.05 + layer * 0.006, d, color, x, -0.025, z);
+
+function ticket(paper) {
+  return merge([
+    slab(0.46, 0.64, P.k, 0),
+    slab(0.38, 0.56, paper, 1),
+    slab(0.22, 0.4, P.r, 2), // the CLOSED stamp
+    slab(0.12, 0.3, paper, 3),
+  ]);
+}
+
+export const PROJECTILE_MODELS = {
+  // Ticket Auto-Close: a ticket stamped CLOSED.
+  proj_ticket: () => ticket(P.w),
+  proj_ticket_gold: () => ticket(P.y),
+  // KB Article: a page with a blue header and grey lines.
+  proj_kb: () => merge([
+    slab(0.56, 0.7, P.k, 0),
+    slab(0.48, 0.62, P.w, 1),
+    slab(0.22, 0.1, P.B, 2, -0.1, 0.22),
+    slab(0.32, 0.04, P.g, 2, 0, 0.06),
+    slab(0.26, 0.04, P.g, 2, -0.03, -0.06),
+    slab(0.32, 0.04, P.g, 2, 0, -0.18),
+  ]),
+  // Remote Desktop Session: somebody else's mouse cursor, tip first.
+  proj_rdp: () => {
+    const shape = new THREE.Shape();
+    const pts = [[0, 0], [0, -0.62], [0.15, -0.48], [0.26, -0.72], [0.36, -0.67], [0.25, -0.44], [0.44, -0.44]];
+    shape.moveTo(pts[0][0], pts[0][1]);
+    for (const [x, y] of pts.slice(1)) shape.lineTo(x, y);
+    const body = new THREE.ExtrudeGeometry(shape, { depth: 0.08, bevelEnabled: false });
+    const edge = body.clone();
+    edge.translate(-0.2, 0.36, 0);
+    edge.scale(1.25, 1.25, 0.9);
+    body.translate(-0.2, 0.36, 0);
+    // Lay it flat with the tip toward +Z (the edge, black and a size up, sits just below).
+    return merge([paint(edge, P.k, 0, -0.03, 0, Math.PI / 2), paint(body, P.B, 0, 0.01, 0, Math.PI / 2)]);
+  },
+  // Auto-Scaling: a little cloud.
+  proj_cloud: () => merge([
+    ball(0.17, P.w, -0.17, 0, 0),
+    ball(0.22, P.w, 0.04, 0.05, 0),
+    ball(0.15, P.w, 0.24, -0.01, 0),
+    ball(0.12, P.q, 0.08, -0.09, 0.1),
+  ]),
+  // Reply-All Storm: an envelope.
+  proj_email: () => merge([
+    slab(0.62, 0.44, P.k, 0),
+    slab(0.54, 0.36, P.w, 1),
+    rotBox(0.3, 0.06, 0.03, P.k, -0.12, 0.012, 0.06, 0, -0.6, 0),
+    rotBox(0.3, 0.06, 0.03, P.k, 0.12, 0.012, 0.06, 0, 0.6, 0),
+  ]),
+  // Asset Tag: a white barcode sticker.
+  proj_tag: () => merge([
+    slab(0.56, 0.42, P.k, 0),
+    slab(0.48, 0.34, P.w, 1),
+    ...[-0.16, -0.08, 0.02, 0.08, 0.16].map((x, i) => slab(i % 2 ? 0.03 : 0.05, 0.2, P.k, 2, x, 0)),
+  ]),
+  // Fairway Driver: an orange disc golf driver.
+  proj_disc: () => merge([
+    cyl(0.36, 0.36, 0.06, P.k, 0, -0.03, 0, 12),
+    cyl(0.32, 0.32, 0.066, P.o, 0, -0.03, 0, 12),
+    cyl(0.2, 0.2, 0.07, P.w, 0, -0.03, 0, 12),
+    cyl(0.15, 0.15, 0.074, P.o, 0, -0.03, 0, 12),
+    cyl(0.05, 0.05, 0.078, P.r, 0, -0.03, 0, 6),
+  ]),
+  // Firewall: a block of bricks, standing, its face toward +Z.
+  proj_firewall: () => {
+    const W = 0.9;
+    const parts = [box(W, 0.7, 0.2, P.k, 0, -0.35, 0)]; // the mortar
+    for (let row = 0; row < 5; row++) {
+      const y = -0.33 + row * 0.135;
+      // Running bond: every other row starts with a half brick.
+      const edges = row % 2 ? [-0.43, -0.32, -0.11, 0.1, 0.31, 0.43] : [-0.43, -0.22, -0.01, 0.2, 0.43];
+      for (let i = 0; i < edges.length - 1; i++) {
+        const x0 = edges[i] + 0.012;
+        const x1 = edges[i + 1] - 0.012;
+        parts.push(box(x1 - x0, 0.11, 0.26, P.r, (x0 + x1) / 2, y, 0));
+      }
+    }
+    return merge(parts);
+  },
+};
+
+// Stand-in for a projectile with no model yet: a small cube.
+export const fallbackProjectile = () => box(0.24, 0.24, 0.24, P.w, 0, -0.12, 0);
+
 // A soft round shadow on the floor, for the horde (and for the tech when shadows are off).
 export function blobShadowGeometry(radius = 0.42) {
   const g = new THREE.CircleGeometry(radius, 14);

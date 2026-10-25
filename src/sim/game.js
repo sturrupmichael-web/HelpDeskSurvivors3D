@@ -6,7 +6,7 @@
 // screen. The renderer maps (x, y) to Three.js (X, Z).
 //
 // The page passes in hooks for what the simulation can't do itself (sound, banners,
-// screen shake, particles, damage numbers); headless they do nothing. The one thing the
+// screen shake, particles, damage numbers, effect rings); headless they do nothing. The one thing the
 // page tells the simulation is what part of the floor is on screen (`view`), which the
 // spawner needs, as the original's spawner needed the canvas size.
 
@@ -19,6 +19,9 @@ import { Floor } from './floor.js';
 import { createPlayer, updatePlayer, FOOT } from './player.js';
 import { makeEnemy, updateEnemies, resolveEnemies } from './enemies.js';
 import { Spawner } from './spawner.js';
+import { WEAPONS } from '../../data/weapons.js';
+import { createWeapon, setWeaponLevel, updateWeapons, weaponReady } from './weapons/index.js';
+import { createProjectilePool, updateProjectiles } from './projectiles.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
@@ -26,13 +29,14 @@ const BURNOUT_PAUSE = 2.5; // seconds on the burnout banner before the shift res
 
 export class Sim {
   // Hooks: sfx(name, x), banner(title, text, seconds), shake(amount),
-  // burst(x, y, colors, count), number(x, y, amount).
+  // burst(x, y, colors, count), number(x, y, amount), ring(x, y, radius, color, life, fill).
   constructor(hooks = {}) {
     this.sfx = hooks.sfx ?? noop;
     this.banner = hooks.banner ?? noop;
     this.shake = hooks.shake ?? noop;
     this.burst = hooks.burst ?? noop;
     this.number = hooks.number ?? noop;
+    this.ring = hooks.ring ?? noop;
     this.map = MAPS.office;
     this.floor = new Floor();
     this.floor.solid = !!this.map.solid;
@@ -41,6 +45,7 @@ export class Sim {
     this.scratch = new Int32Array(SPAWNER.maxEnemies); // query buffers (two, for nested queries)
     this.scratch2 = new Int32Array(SPAWNER.maxEnemies);
     this.spawner = new Spawner();
+    this.projectiles = createProjectilePool();
     // The visible floor around the camera's ground point, in world px: the four screen
     // corners (x, y pairs, clockwise from bottom left), the extents, and the farthest corner.
     this.view = { corners: new Float64Array(8), left: 0, right: 0, top: 0, bottom: 0, radius: 0 };
@@ -69,12 +74,15 @@ export class Sim {
 
   newRun(charId = this.charId ?? 'tier1') {
     this.charId = charId;
-    this.player = createPlayer(CHARACTERS[charId]);
+    const def = CHARACTERS[charId];
+    this.player = createPlayer(def);
+    this.player.weapons.push(createWeapon(def.starter, 0));
     this.time = 0;
     this.ticks = 0;
     this.kills = 0;
     this.burnoutT = 0;
     this.enemies.clear();
+    this.projectiles.clear();
     this.spawner.reset();
     // Start in a clear spot: walk down from the origin until the feet are off furniture.
     const p = this.player;
@@ -99,6 +107,11 @@ export class Sim {
         e.px = e.x;
         e.py = e.y;
       }
+      for (let i = 0; i < this.projectiles.count; i++) {
+        const o = this.projectiles.items[i];
+        o.px = o.x;
+        o.py = o.y;
+      }
       if ((this.burnoutT -= dt) <= 0) this.newRun();
       return;
     }
@@ -109,6 +122,8 @@ export class Sim {
     updateEnemies(this, dt);
     this.hash.build(this.enemies.items, this.enemies.count, p.x, p.y);
     resolveEnemies(this, dt);
+    updateWeapons(this, dt);
+    updateProjectiles(this, dt);
     this.enemies.compact(); // hash indices are stale after this point
     if (p.hp <= 0) {
       p.hp = 0;
@@ -127,6 +142,20 @@ export class Sim {
   }
   debugClear() {
     this.enemies.clear();
+  }
+  // Adds the next tool the tech doesn't have yet (up to the slot limit). Returns it.
+  debugAddWeapon() {
+    const p = this.player;
+    if (p.weapons.length >= p.maxWeapons) return null;
+    const id = Object.keys(WEAPONS).find((k) => weaponReady(k) && !WEAPONS[k].evolved && !p.weapons.some((w) => w.id === k || w.def.from === k));
+    if (!id) return null;
+    const w = createWeapon(id, p.weapons.length);
+    p.weapons.push(w);
+    return w;
+  }
+  // Every tool one level up (until level-ups arrive in milestone 4).
+  debugLevelWeapons() {
+    for (const w of this.player.weapons) if (w.level < w.def.levels.length) setWeaponLevel(w, w.level + 1);
   }
 }
 
