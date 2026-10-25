@@ -28,8 +28,10 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | --- | --- |
 | WASD / Arrow keys / left stick | Move |
 | Touch | Put a finger down anywhere and drag (floating joystick) |
-| Enter (title screen) | Clock In: pick a tech (once there's more than one, or pay to hire one), then a map. Arrows or 1-9 to choose, Enter for next, Esc to go back |
-| S / C / A / O (title screen) | Overtime Shop / Characters / Achievements / Settings |
+| Enter (title screen) | Clock In: pick a tech (once there's more than one, or pay to hire one), then a map, then Shift Policies (after your first shift). Arrows or 1-9 to choose, Enter for next, Esc to go back. The very first Clock In offers the training shift |
+| H (map step) | Hardcore on/off (once you've won a shift on every map) |
+| R / N (Shift Policies step) | Reorg: two random bad policies for an extra +10% / no policies |
+| S / C / A / O / T (title screen) | Overtime Shop / Characters / Achievements / Settings / Training |
 | Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts and Q quits to the title from the pause menu (press twice) |
 | Enter / C / S / Esc | End-of-shift summary: Next Shift / Change Tech or Map / Overtime Shop / Title |
 | R (level-up cards) | Reroll the cards (needs the shop's Escalation Path) |
@@ -52,7 +54,7 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | 1–4 / tap | Pick a level-up card |
 | R | Playtest: start a new shift |
 | G | Playtest: +$1,000 Overtime Pay (works on the menus too). Settings also has Wipe the save |
-| L | Playtest: unlock the next map, as if you'd won a shift on the one before it (works on the menus too) |
+| L | Playtest: unlock the next map, as if you'd won a shift on the one before it; once every map is open, count a win on all of them, which opens Hardcore (works on the menus too) |
 
 ## Project layout
 
@@ -66,7 +68,8 @@ src/sim/       the simulation: player, users and their behaviors/, tools (weapon
                attacks (hazards.js), spawner and wave timeline, the five maps' floor layouts and
                collision (floor.js) and their twists (maps.js), the
                save with Overtime Pay, the shop and unlocks (meta.js), achievements, tech perks
-               (perks.js), the shift timeline and the performance review. No Three.js, no DOM
+               (perks.js), Shift Policies and Hardcore (policies.js), the training shift
+               (tutorial.js), the shift timeline and the performance review. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
                tool effects, pickups, floor zones (zones.js), bosses and their floor telegraphs (bosses.js), boss
                bullets and meeting bombs (hazards.js), particles (fx.js), models.js (every shape

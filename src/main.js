@@ -1,7 +1,7 @@
 // Entry point: start input, the save, the simulation, the 3D view and the page UI, then
 // the loop. The game opens on the title screen, over the office floor.
 
-import { initInput, moveAxis, pollGamepad, onKeyPress } from './engine/input.js';
+import { initInput, moveAxis, pollGamepad, onKeyPress, gamepadConnected, touchState } from './engine/input.js';
 import { startLoop } from './engine/loop.js';
 import { Sim } from './sim/game.js';
 import { View } from './render/view.js';
@@ -50,6 +50,10 @@ const sim = new Sim({
   number: (x, y, amount) => floaters.number(x, y, amount),
   text: (x, y, words, color) => floaters.text(x, y, words, color),
   toast: (a) => hud.toast(a),
+  coach: (c) => hud.coach(c),
+  coachProgress: (v) => hud.coachProgress(v),
+  // How this player moves, for the training shift's first card.
+  device: () => (gamepadConnected() ? 'pad' : touchState.used || matchMedia('(pointer: coarse)').matches ? 'touch' : 'keys'),
 }, meta);
 setMusicStyle(sim.map.music);
 // Antialiasing is fixed when the renderer is made: off on phones, where it costs most.
@@ -65,7 +69,7 @@ const levelUp = new LevelUpScreen(
 );
 const pause = new PauseScreen(ui, {
   onResume: () => sim.resume(),
-  onRestart: () => newShift(),
+  onRestart: () => (sim.tutorial ? startTraining() : newShift()),
   onQuit: () => toMenu().title(),
   onSettings: () => panel.toggle(true),
   onMute: () => mute(),
@@ -73,6 +77,7 @@ const pause = new PauseScreen(ui, {
 });
 const gameOver = new GameOverScreen(ui, (act) => {
   if (act === 'again') newShift();
+  else if (act === 'clockin') toMenu().clockIn(); // after training
   else if (act === 'switch') toMenu().setup('char');
   else if (act === 'shop') toMenu().shop();
   else toMenu().title();
@@ -81,6 +86,7 @@ const menus = new Menus(ui, {
   sim,
   portrait: (id) => view.portrait(id),
   onStart: () => newShift(),
+  onTraining: () => startTraining(),
   onPreview: (tech, map) => reset(tech, map),
   onSettings: () => panel.toggle(true),
   sfx,
@@ -95,12 +101,21 @@ function reset(tech, map) {
   view.resetCamera();
   view.fx.clear();
   floaters.clear();
+  hud.coach(null); // a training shift left behind
 }
 
 function newShift() {
   menus.hide();
   sim.menu = false;
   reset();
+}
+
+// The training shift: always on the Office with the picked tech, and no policies.
+function startTraining() {
+  menus.hide();
+  sim.menu = false;
+  reset(undefined, 'office');
+  sim.startTutorial();
 }
 
 // Back to the menus between shifts (the title, the Clock In picker, the shop): the floor
@@ -157,7 +172,7 @@ function playtest(act) {
     p.god = !p.god;
     banner.show(p.god ? 'GOD MODE ON' : 'GOD MODE OFF', p.god ? 'Users can no longer hurt you.' : 'Careful now.', 1.5);
   } else if (act === 'clear') sim.debugClear();
-  else if (act === 'restart' && !sim.menu) newShift();
+  else if (act === 'restart' && !sim.menu) sim.tutorial ? startTraining() : newShift();
   else if (act === 'pay') {
     meta.data.pay += 1000;
     meta.save();
@@ -165,9 +180,16 @@ function playtest(act) {
     banner.show('+$1,000 OVERTIME PAY', `Balance: $${meta.data.pay.toLocaleString()}. Spend it in the Overtime Shop or on a new tech.`, 2);
   } else if (act === 'map') {
     // Counts a win on the map before the next locked one, as if you'd clocked out there:
-    // that opens the map, and whatever that win unlocks (data/unlocks.js).
+    // that opens the map, and whatever that win unlocks (data/unlocks.js). Once every map
+    // is open, counts a win on the rest, which opens Hardcore.
     const next = MAP_ORDER.find((id) => !meta.mapUnlocked(id));
-    if (!next) return banner.show('EVERY MAP IS OPEN', 'Pick one when you Clock In.', 2);
+    if (!next) {
+      if (meta.hardcoreOpen()) return banner.show('EVERYTHING IS OPEN', 'Every map, and the Hardcore switch under the maps.', 2);
+      for (const id of MAP_ORDER) if (!meta.data.mapsWon.includes(id)) meta.data.mapsWon.push(id);
+      meta.save();
+      menus.refresh();
+      return banner.show('HARDCORE UNLOCKED', 'Counted a win on every map. The switch is under the maps when you Clock In.', 2.5);
+    }
     const won = MAPS[next].unlockAfter;
     meta.data.mapsWon.push(won);
     meta.save();

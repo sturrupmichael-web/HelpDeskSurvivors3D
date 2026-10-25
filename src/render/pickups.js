@@ -60,8 +60,10 @@ export class PickupView {
     const y1 = rect.y1 + 32;
 
     const tickets = sim.tickets;
+    const life = sim.policy.ticketLife; // Ticket Blitz: tickets about to vanish blink
     for (let i = 0; i < tickets.count; i++) {
       const t = tickets.items[i];
+      if (life && t.age > life - 2 && (t.age * 8) & 1) continue;
       const wx = lerp(t.px, t.x, alpha);
       const wy = lerp(t.py, t.y, alpha) + FOOT; // drawn at the same ground point as the tech and users
       if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;

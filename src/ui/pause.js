@@ -1,12 +1,15 @@
 // The pause menu ("ON HOLD"): Esc, P, gamepad Start or the II button. Also opens by itself
 // when the tab is hidden. Ported from the original's src/ui/screens/pause.js; Restart and
-// Quit to Title throw the shift (and its pay) away, so they need a second press. Not yet
-// ported: Shift Stats and Report a Bug.
+// Quit to Title throw the shift (and its pay) away, so outside training they need a second
+// press. It also lists the shift's policies. Not yet ported: Shift Stats and Report a Bug.
 
 import { PAUSE_LINES } from '../../data/flavor.js';
+import { POLICIES } from '../../data/policies.js';
+import { fmtMult } from '../sim/policies.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
-const LABELS = { restart: 'Restart Shift <kbd>R</kbd>', quit: 'Quit to Title <kbd>Q</kbd>' };
+const SHIFT_LABELS = { restart: 'Restart Shift <kbd>R</kbd>', quit: 'Quit to Title <kbd>Q</kbd>' };
+const TRAINING_LABELS = { restart: 'Restart Training <kbd>R</kbd>', quit: 'Skip Training <kbd>Q</kbd>' };
 
 export class PauseScreen {
   // `onResume()`, `onRestart()`, `onQuit()`, `onSettings()` and `onMute()` go back to the
@@ -28,6 +31,8 @@ export class PauseScreen {
     });
     this.armed = null; // the button waiting for its second press
     this.disarm = 0;
+    this.training = false;
+    this.labels = SHIFT_LABELS;
   }
 
   get open() {
@@ -37,23 +42,30 @@ export class PauseScreen {
   // Called every frame: shows or hides itself to match `sim.paused`.
   update(sim) {
     if (sim.paused === this.open) return;
-    if (sim.paused) this.show();
+    if (sim.paused) this.show(sim);
     else this.el.hidden = true;
   }
 
-  show() {
+  show(sim) {
     this.armed = null;
     clearTimeout(this.disarm);
+    this.training = !!sim.tutorial;
+    this.labels = this.training ? TRAINING_LABELS : SHIFT_LABELS;
+    const pol = sim.policy;
+    const policies = pol.ids.length || pol.hardcore
+      ? `<p class="pause-policies">${pol.hardcore ? '<b class="hc-tag">HARDCORE</b> ' : ''}${pol.ids.length ? 'Policies' : 'Pay and score'} (${fmtMult(pol.mult)})${pol.ids.length ? ': ' : ''}${pol.ids.map((id) => `<b>${POLICIES[id].name}</b>`).join(', ')}</p>`
+      : '';
     this.el.innerHTML = `
       <div class="panel pause-panel">
         <h2>ON HOLD</h2>
         <p class="sub">${pickLine(PAUSE_LINES)}</p>
+        ${policies}
         <button class="primary" data-act="resume">Resume <kbd>Esc</kbd></button>
         <button data-act="settings">Settings <kbd>O</kbd></button>
         <button data-act="mute">${this.soundLabel()}</button>
         <div class="pause-danger">
-          <button class="confirm" data-act="restart">${LABELS.restart}</button>
-          <button class="confirm" data-act="quit">${LABELS.quit}</button>
+          <button class="confirm" data-act="restart">${this.labels.restart}</button>
+          <button class="confirm" data-act="quit">${this.labels.quit}</button>
         </div>
       </div>`;
     this.el.hidden = false;
@@ -64,7 +76,7 @@ export class PauseScreen {
     else if (act === 'settings') this.onSettings();
     else if (act === 'mute') this.onMute();
     else if (act === 'restart' || act === 'quit') {
-      if (this.armed !== act) {
+      if (this.armed !== act && !this.training) {
         // First press: ask again, and forget it after 3 seconds.
         this.reset();
         this.armed = act;
@@ -86,7 +98,7 @@ export class PauseScreen {
     if (!this.armed) return;
     const b = this.el.querySelector(`[data-act=${this.armed}]`);
     b?.classList.remove('armed');
-    if (b) b.innerHTML = LABELS[this.armed];
+    if (b) b.innerHTML = this.labels[this.armed];
     this.armed = null;
   }
 

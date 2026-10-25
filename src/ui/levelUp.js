@@ -44,13 +44,14 @@ export class LevelUpScreen {
       this.el.hidden = true;
       return;
     }
-    if (sim.choices) this.showCards(sim.choices, sim.player.rerolls);
+    if (sim.choices) this.showCards(sim.choices, sim.player.rerolls, sim.levelUpTip);
     else this.showChest(sim.chest);
     this.el.hidden = false;
     this.readyAt = performance.now() + READY_DELAY;
   }
 
-  showCards(choices, rerolls) {
+  // `tip` is the training shift's explanation, shown above the cards (or null).
+  showCards(choices, rerolls, tip) {
     this.choices = choices;
     this.onlyPizza = choices.length === 1 && choices[0].kind === 'reward';
     const card = (c, i) => `
@@ -68,6 +69,7 @@ export class LevelUpScreen {
       <div class="panel wide levelup-panel">
         <h2>LEVEL UP!</h2>
         <p class="sub">${pickLine(LEVEL_UP_LINES)}</p>
+        ${tip ? `<p class="levelup-tip"><b>TRAINING:</b> ${tip}</p>` : ''}
         <div class="cards">${choices.map(card).join('')}</div>
         ${this.onlyPizza ? `<button class="always" data-act="always">Everything's maxed: always take the pizza from now on <kbd>A</kbd></button>` : ''}
         ${rerolls > 0 && !this.onlyPizza ? `<button class="always" data-act="reroll">Escalate: reroll these cards (${rerolls} left) <kbd>R</kbd></button>` : ''}

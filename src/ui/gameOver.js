@@ -1,9 +1,10 @@
 // The end-of-shift summary: BURNOUT (or CLOCKED OUT), the run's stats and records, the
-// Overtime Pay earned, what a map win unlocked, damage by tool and the passives taken, the
-// shift timeline and the HR performance review, then Next Shift, Change Tech, the shop or
-// the title.
-// Ported from the original's src/ui/screens/gameOver.js. Not yet ported: the Knowledge
-// Base and Shift Policy lines (M12) and posting to the leaderboard (M13).
+// Overtime Pay earned, what a map win unlocked, the shift's policies and score, damage by
+// tool and the passives taken, the shift timeline and the HR performance review, then Next
+// Shift, Change Tech, the shop or the title. At the end of the training shift it shows the
+// "you're ready" screen instead (the original's trainingDone).
+// Ported from the original's src/ui/screens/gameOver.js and training.js. Not yet ported:
+// the Knowledge Base and posting to the leaderboard (M13).
 
 import { icon } from './icons.js';
 import { fmtTime } from './hud.js';
@@ -14,6 +15,8 @@ import { CHARACTERS } from '../../data/player.js';
 import { WEAPONS } from '../../data/weapons.js';
 import { PASSIVES } from '../../data/passives.js';
 import { MAPS } from '../../data/maps.js';
+import { POLICIES } from '../../data/policies.js';
+import { fmtMult } from '../sim/policies.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
 const READY_DELAY = 600; // ms: don't let a held key skip the summary
@@ -28,7 +31,7 @@ function reviewCard(s) {
   const r = s.review;
   const stars = '★'.repeat(r.stars) + '☆'.repeat(5 - r.stars);
   return `<div class="review rating-${r.ratingId}">
-    <div class="review-head"><span>PERFORMANCE REVIEW</span><span>${s.character}</span></div>
+    <div class="review-head"><span>PERFORMANCE REVIEW${s.hardcore ? ' <b class="hc-tag">HARDCORE</b>' : ''}</span><span>${s.character}</span></div>
     <div class="review-rating"><span class="review-stars" aria-label="${r.stars} out of 5">${stars}</span><b>${r.rating}</b></div>
     <div class="review-label">Manager's comments</div>
     <ul>${r.lines.map((l) => `<li>${l}</li>`).join('')}</ul>
@@ -38,7 +41,8 @@ function reviewCard(s) {
 }
 
 export class GameOverScreen {
-  // `onAct(act)`: 'again' (the next shift), 'switch' (change tech), 'shop' or 'title'.
+  // `onAct(act)`: 'again' (the next shift), 'switch' (change tech), 'shop' or 'title'; after
+  // training, 'clockin' (the Clock In picker) or 'title'.
   constructor(root, onAct) {
     this.onAct = onAct;
     this.el = document.createElement('div');
@@ -66,6 +70,7 @@ export class GameOverScreen {
   }
 
   show(s) {
+    if (s.training) return this.showTraining();
     const rec = (k) => (s.records.includes(k) ? ' <b class="record">NEW RECORD</b>' : '');
     const topDamage = Math.max(1, ...s.tools.map((t) => t.damage));
     const items = [...s.tools, ...s.passives];
@@ -87,6 +92,9 @@ export class GameOverScreen {
         <p class="sub">${pickLine(s.won ? VICTORY_QUIPS : BURNOUT_QUIPS)}</p>
         ${s.newMap ? `<p class="unlock">NEW MAP UNLOCKED: <b>${MAPS[s.newMap].name}</b> (pick it when you Clock In)</p>` : ''}
         ${s.newUnlocks?.length ? `<p class="unlock">NOW AVAILABLE: ${s.newUnlocks.map((u) => `<b>${unlockName(u)}</b>`).join(', ')}</p>` : ''}
+        ${s.policiesOpened ? '<p class="unlock">SHIFT POLICIES UNLOCKED: optional twists for more pay and score. Pick them when you Clock In, after the map.</p>' : ''}
+        ${s.hardcoreOpened ? '<p class="unlock">HARDCORE UNLOCKED: you\'ve won on every map. Flip the Hardcore switch under the maps when you Clock In, for double pay and score.</p>' : ''}
+        ${s.newPolicies?.length && !s.policiesOpened ? `<p class="unlock">NEW POLICIES: ${s.newPolicies.map((id) => `<b>${POLICIES[id].name}</b>`).join(', ')}</p>` : ''}
         <div class="summary-cols">
           <table class="stats">
             <tr><td>Technician</td><td>${s.character}</td></tr>
@@ -94,6 +102,13 @@ export class GameOverScreen {
             <tr><td>Time survived</td><td>${fmtTime(s.time)}${rec('time')}</td></tr>
             <tr><td>Tickets closed</td><td>${s.kills.toLocaleString()}${rec('tickets')}</td></tr>
             <tr><td>CSAT score</td><td>${s.csat.toLocaleString()}${rec('csat')}</td></tr>
+            ${
+              s.policies.length || s.hardcore
+                ? `${s.hardcore ? '<tr><td>Mode</td><td><b class="hc-tag">HARDCORE</b> x2</td></tr>' : ''}
+                   ${s.policies.length ? `<tr><td>Policies</td><td class="pol-line">${s.policies.map((id) => POLICIES[id].name).join(', ')}${s.reorg ? ' (Reorg)' : ''}</td></tr>` : ''}
+                   <tr><td>Leaderboard score</td><td>${s.score.toLocaleString()} <span class="pol-line">(CSAT ${fmtMult(s.policyMult)})</span></td></tr>`
+                : ''
+            }
             <tr><td>Best streak</td><td>x${s.bestStreak}</td></tr>
             <tr><td>Level reached</td><td>${s.level}</td></tr>
             <tr class="paid"><td>Overtime Pay earned</td><td>+${PAY(s.pay)}</td></tr>
@@ -114,10 +129,33 @@ export class GameOverScreen {
         </div>
       </div>`;
     this.el.hidden = false;
+    this.training = false;
     this.el.querySelector('.panel').scrollTop = 0;
     this.readyAt = performance.now() + READY_DELAY;
     wireTimeline(this.el, s.timeline);
     wireItems(this.el, items);
+  }
+
+  // End of the training shift.
+  showTraining() {
+    this.el.innerHTML = `
+      <div class="panel training">
+        <h1>TRAINING<br>COMPLETE</h1>
+        <p class="sub">You're ready for the floor. A few things to know:</p>
+        <ul class="training-list">
+          <li>Survive the 20-minute shift and beat The Executive to clock out.</li>
+          <li>Every shift pays Overtime Pay, even a short one. Spend it in the Overtime Shop on permanent upgrades, or hire new technicians.</li>
+          <li>Bosses drop a Change Approved chest. A maxed tool plus the right passive can evolve in one.</li>
+          <li>Pause with the II button<span class="keys-only"> or <kbd>Esc</kbd></span>. Training is always on the title screen if you want it again.</li>
+        </ul>
+        <div class="summary-buttons">
+          <button class="primary" data-act="clockin">Clock In <kbd>Enter</kbd></button>
+          <button data-act="title">Title <kbd>Esc</kbd></button>
+        </div>
+      </div>`;
+    this.el.hidden = false;
+    this.training = true;
+    this.readyAt = performance.now() + READY_DELAY;
   }
 
   go(act) {
@@ -132,7 +170,8 @@ export class GameOverScreen {
   key(code) {
     if (!this.open) return false;
     if (code === 'KeyF' || code === 'KeyO' || code === 'KeyM') return false;
-    if (code === 'Enter' || code === 'Space' || code === 'PadA' || code === 'PadStart') this.go('again');
+    if (code === 'Enter' || code === 'Space' || code === 'PadA' || code === 'PadStart') this.go(this.training ? 'clockin' : 'again');
+    else if (this.training && code !== 'Escape' && code !== 'PadB') return true;
     else if (code === 'KeyC') this.go('switch');
     else if (code === 'KeyS') this.go('shop');
     else if (code === 'Escape' || code === 'PadB') this.go('title');

@@ -1,6 +1,6 @@
 // End-user horde: pooled enemy objects, movement via behaviors, separation, contact
 // damage, damage and death. Ported from the original's src/game/enemies.js with the
-// drawing removed. Not yet ported: Shift Policies (M12).
+// drawing removed.
 
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
@@ -57,11 +57,12 @@ export function spawnEnemy(game, id, x, y, hpMult = 1, speedMult = 1, behaviorId
   e.foot = def.foot ?? DEFAULT_FOOT;
   e.kx = e.ky = e.dx = e.dy = 0;
   // The map (and where on it they spawn: Merger Day's acquired floor) toughens regular
-  // users; bosses keep their tuned HP.
+  // users; bosses keep their tuned HP (apart from the Escalated policy's bossHp).
   const map = def.boss ? null : game.map;
-  e.hp = e.maxHp = def.hp * hpMult * (map?.hpMult ?? 1) * (map ? game.twist.hpMult(game, x, y) : 1);
-  e.speed = def.speed * speedMult * (map?.speedMult ?? 1);
-  e.damage = def.damage;
+  const pol = game.policy;
+  e.hp = e.maxHp = def.hp * hpMult * (map?.hpMult ?? 1) * (map ? game.twist.hpMult(game, x, y) : 1) * (def.boss ? pol.bossHp : pol.enemyHp);
+  e.speed = def.speed * speedMult * (map?.speedMult ?? 1) * (def.boss ? 1 : pol.enemySpeed);
+  e.damage = def.damage * (def.boss ? 1 : pol.enemyDamage); // Hardcore: users hit harder
   e.xp = def.xp;
   e.kbMul = def.knockback;
   e.slow = e.buff = 1;
@@ -311,7 +312,7 @@ export function killEnemy(game, e, weapon) {
     game.sfx('combo');
   }
   if (e.xp > 0) {
-    const xp = e.xp * e.tagXp * game.twist.xpMult(game, e.x, e.y);
+    const xp = e.xp * e.tagXp * game.twist.xpMult(game, e.x, e.y) * game.policy.ticketXp;
     if (weapon?.def.merge) weapon.mergeXp += xp;
     else {
       const t = dropTicket(game, e.x, e.y, xp);
@@ -326,8 +327,9 @@ export function killEnemy(game, e, weapon) {
   const od = e.def.onDeath;
   if (od) {
     const hpMult = game.spawner.sample(game.time, 'hpMult');
-    for (let i = 0; i < od.count; i++) {
-      const a = (i / od.count) * Math.PI * 2 + Math.random();
+    const count = od.count + (game.policy.splits[e.def.sprite] ?? 0); // Reply-All Day
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random();
       const c = spawnEnemy(game, od.spawn, e.x + Math.cos(a) * 10, e.y + Math.sin(a) * 10, hpMult);
       if (c) {
         c.kx = Math.cos(a) * 120;

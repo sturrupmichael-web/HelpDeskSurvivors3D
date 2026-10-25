@@ -6,7 +6,6 @@
 //   extra padding so a standing figure's head doesn't poke in at the bottom edge.
 // - Only users whose behavior has been ported spawn (`ready`); the others are left out of
 //   the mix, and boss events whose boss isn't ported are skipped.
-// Not yet ported: Shift Policies (M12).
 
 import { TIMELINE, EVENTS, SPAWNER, SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
 import { ENEMIES } from '../../data/enemies.js';
@@ -79,6 +78,22 @@ export function mapEvent(ev, map) {
   return byMap.get(map);
 }
 
+// A Shift Policy's mixBoost (Reply-All Day, Phishing Simulation) on top of the map's mix.
+// Cached per mix and policy.
+const policyMixes = new WeakMap();
+function policyMix(mix, policy) {
+  if (!hasKeys(policy.mixBoost)) return mix;
+  let byPolicy = policyMixes.get(mix);
+  if (!byPolicy) policyMixes.set(mix, (byPolicy = new WeakMap()));
+  let m = byPolicy.get(policy);
+  if (!m) {
+    m = {};
+    for (const id in mix) m[id] = mix[id] * (policy.mixBoost[id] ?? 1);
+    byPolicy.set(policy, m);
+  }
+  return m;
+}
+
 function pick(mix) {
   let total = 0;
   for (const id in mix) total += mix[id];
@@ -140,19 +155,25 @@ export class Spawner {
     return this.pt;
   }
 
+  // Monday Morning (policy): the queue (how many users, how fast they come, who they are
+  // and how tough) starts as it is at `headStart`.
+  busyTime(game) {
+    return Math.max(game.time, game.policy.headStart);
+  }
+
   // Overtime level (data/waves.js OVERTIME): 0 until the grace period after 20:00 runs out,
   // then 1, 2, 3... one more each minute.
   overtimeLevel(game) {
-    const t = game.time - SHIFT_LENGTH - OVERTIME.grace;
-    return t < 0 ? 0 : 1 + Math.floor(t / OVERTIME.every);
+    const t = game.time - SHIFT_LENGTH - (game.policy.otGrace ?? OVERTIME.grace); // Hardcore: shorter grace
+    return t < 0 || game.tutorial ? 0 : 1 + Math.floor(t / OVERTIME.every);
   }
 
   spawn(game, id, angle) {
     const t = game.time;
     const pt = this.ringPoint(game, angle);
-    id ??= pick(mapMix(mixAt(t), game.map, t));
+    id ??= pick(policyMix(mapMix(mixAt(this.busyTime(game)), game.map, t), game.policy));
     const ot = this.overtimeLevel(game);
-    const hp = this.sample(t, 'hpMult') * (1 + OVERTIME.hpPerLevel * ot);
+    const hp = this.sample(this.busyTime(game), 'hpMult') * (1 + OVERTIME.hpPerLevel * ot);
     const speed = this.sample(t, 'speedMult') * (1 + Math.min(OVERTIME.maxSpeed, OVERTIME.speedPerLevel * ot));
     const e = spawnEnemy(game, id, pt.x, pt.y, hp, speed);
     if (e && ot) e.damage *= 1 + OVERTIME.damagePerLevel * ot;
@@ -168,9 +189,10 @@ export class Spawner {
       if (ot === 1) game.banner('UNPAID OVERTIME', "Every minute you're still here, the users get tougher.", 4);
       game.sfx('warn');
     }
-    const scale = (game.bossAlive() ? this.bossScale : 1) * (1 + OVERTIME.spawnPerLevel * ot);
-    this.acc += this.sample(game.time, 'rate') * scale * dt;
-    const min = this.sample(game.time, 'minAlive') * scale;
+    const scale = (game.bossAlive() ? this.bossScale : 1) * (1 + OVERTIME.spawnPerLevel * ot) * game.policy.spawns; // Hardcore: more users
+    const busy = this.busyTime(game);
+    this.acc += this.sample(busy, 'rate') * scale * dt;
+    const min = this.sample(busy, 'minAlive') * scale;
     while (game.enemies.count < min && game.enemies.count < SPAWNER.maxEnemies) this.spawn(game);
     while (this.acc >= 1) {
       this.acc -= 1;

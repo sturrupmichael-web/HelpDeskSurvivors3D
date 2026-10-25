@@ -1,5 +1,4 @@
-// Ported from the original (HelpDeskSurvivor src/game/behaviors/); Shift Policies' extra
-// summons come back with the policies.
+// Ported from the original (HelpDeskSurvivor src/game/behaviors/).
 // Phish Clicker: keeps some distance and periodically releases minions (Malware).
 // params: every (s), count, minion (enemy id), keepDistance (px)
 
@@ -21,7 +20,8 @@ export default {
     if (e.t0 <= 0) {
       e.t0 = p.every;
       const hp = game.spawner.sample(game.time, 'hpMult');
-      for (let i = 0; i < p.count; i++) spawnEnemy(game, p.minion, e.x + (Math.random() * 20 - 10), e.y + (Math.random() * 20 - 10), hp);
+      const count = p.count + (game.policy.summons[e.def.sprite] ?? 0); // Phishing Simulation
+      for (let i = 0; i < count; i++) spawnEnemy(game, p.minion, e.x + (Math.random() * 20 - 10), e.y + (Math.random() * 20 - 10), hp);
       game.burst(e.x, e.y - 8, e.def.particle, 4);
     }
   },

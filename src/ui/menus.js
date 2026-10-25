@@ -1,11 +1,12 @@
 // The menus between shifts: the title screen, the Clock In picker (pick a tech, then a
-// map), Characters, the Overtime Shop and Achievements. One overlay; each screen renders
-// into it and handles its own keys.
-// Ported from the original's src/ui/screens/ (title.js, shiftSetup.js, characters.js,
-// shop.js, achievements.js): the same wording, cards and keys. The tech pictures are
-// renders of the 3D models (`portrait`) where the original drew sprites. Not yet ported:
-// the training shift, Shift Policies and Hardcore (M12), the leaderboard and account (M13),
-// the Knowledge Base, what's new and Report a Bug.
+// map with the Hardcore switch under it, then Shift Policies), the training offer,
+// Characters, the Overtime Shop and Achievements. One overlay; each screen renders into it
+// and handles its own keys.
+// Ported from the original's src/ui/screens/ (title.js, shiftSetup.js, policies.js,
+// training.js, characters.js, shop.js, achievements.js): the same wording, cards and keys.
+// The tech pictures are renders of the 3D models (`portrait`) where the original drew
+// sprites. Not yet ported: the leaderboard and account (M13), the Knowledge Base, what's
+// new and Report a Bug.
 
 import { icon } from './icons.js';
 import { fmtTime } from './hud.js';
@@ -16,6 +17,8 @@ import { SHOP } from '../../data/meta.js';
 import { ACHIEVEMENTS } from '../../data/achievements.js';
 import { TITLE_TAGLINES } from '../../data/flavor.js';
 import { VERSION } from '../version.js';
+import { POLICIES, POLICY_ORDER, POLICY_GROUPS, POLICY_RULES, HARDCORE } from '../../data/policies.js';
+import { shiftMult, fmtMult, clashes, rollReorg, hardcoreOk } from '../sim/policies.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
 export const PAY = (n) => `<span class="pay">$${n.toLocaleString()}</span>`;
@@ -23,12 +26,14 @@ const DIGITS = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 
 
 export class Menus {
   // `sim` for the save (sim.meta) and achievements; `portrait(techId)` gives a picture URL;
-  // `onStart()` starts a shift with the saved picks; `onPreview(tech, map)` shows a tech on
-  // a map's floor behind the menu (the saved picks by default); `onSettings()` opens Settings; `sfx`.
-  constructor(root, { sim, portrait, onStart, onPreview, onSettings, sfx }) {
+  // `onStart()` starts a shift with the saved picks; `onTraining()` starts the training
+  // shift; `onPreview(tech, map)` shows a tech on a map's floor behind the menu (the saved
+  // picks by default); `onSettings()` opens Settings; `sfx`.
+  constructor(root, { sim, portrait, onStart, onTraining, onPreview, onSettings, sfx }) {
     this.sim = sim;
     this.portrait = portrait;
     this.onStart = onStart;
+    this.onTraining = onTraining;
     this.onPreview = onPreview;
     this.onSettings = onSettings;
     this.sfx = sfx;
@@ -92,7 +97,11 @@ export class Menus {
     const ch = CHARACTERS[m.selected];
     const go = (act) => {
       this.sfx('click');
-      if (act === 'start') this.clockIn();
+      if (act === 'start') {
+        // Brand-new players get offered the training shift once.
+        if (!m.trained && !m.shifts && !m.offeredTraining) this.trainingOffer();
+        else this.clockIn();
+      } else if (act === 'training') this.onTraining();
       else if (act === 'chars') this.characters();
       else if (act === 'shop') this.shop();
       else if (act === 'ach') this.achievements();
@@ -117,6 +126,7 @@ export class Menus {
             ${tile('chars', 'delegate', 'Characters', `${hired}/${Object.keys(CHARACTERS).length} hired`, 'C')}
             ${tile('ach', 'cert', 'Achievements', `${Object.keys(m.achievements ?? {}).length}/${ACHIEVEMENTS.length}`, 'A')}
             ${tile('settings', 'policy', 'Settings', 'Sound, quality, camera', 'O')}
+            ${tile('training', 'book', 'Training', m.trained ? 'Done: take it again' : 'A guided first shift', 'T')}
           </div>
           <p class="title-records">${
             m.shifts
@@ -135,6 +145,7 @@ export class Menus {
         else if (code === 'KeyC') go('chars');
         else if (code === 'KeyS') go('shop');
         else if (code === 'KeyA') go('ach');
+        else if (code === 'KeyT') go('training');
         else return false; // O (Settings) is the page's
       },
       () => this.title(),
@@ -143,33 +154,45 @@ export class Menus {
   }
 
   // --- Clock In ---------------------------------------------------------------------------
+  // Pick a tech, then a map, then (once you've finished a shift) Shift Policies. Everything
+  // starts on the last shift's picks, which are saved when the shift starts.
   // From the title: skips a step that has nothing to choose (one tech and nothing affordable
   // to hire, or one open map), so a brand-new player goes straight to work. "Change Tech"
   // on the end-of-shift screen still shows every step.
   clockIn() {
     const meta = this.meta;
-    const pick = { char: meta.data.selected, map: meta.data.map, skipped: {} };
+    const pick = this.savedPick();
+    pick.skipped = {};
     const chars = Object.keys(CHARACTERS);
     const hireable = (id) => !meta.isUnlocked(id) && meta.itemUnlocked('characters', id) && meta.data.pay >= CHARACTERS[id].cost;
     pick.skipped.char = chars.filter((id) => meta.isUnlocked(id)).length === 1 && !chars.some(hireable);
     pick.skipped.map = MAP_ORDER.filter((id) => meta.mapUnlocked(id)).length === 1;
     if (!pick.skipped.char) return this.setup('char', pick);
     if (!pick.skipped.map) return this.setup('map', pick);
+    if (meta.policiesOpen()) return this.policies(pick);
     this.start(pick);
+  }
+
+  savedPick() {
+    const d = this.meta.data;
+    return { char: d.selected, map: d.map, policies: [...d.policies], reorg: d.reorg, hardcore: this.meta.hardcoreOn() };
   }
 
   start(pick) {
     this.sfx('click');
     this.meta.select(pick.char);
     this.meta.selectMap(pick.map);
+    if (pick.policies) this.meta.setPolicies(pick.policies, pick.reorg);
+    this.meta.setHardcore(pick.hardcore);
     this.onStart();
   }
 
   setup(step = 'char', pick) {
     const meta = this.meta;
-    pick ??= { char: meta.data.selected, map: meta.data.map };
+    pick ??= this.savedPick();
+    const withPolicies = meta.policiesOpen();
     const skipped = pick.skipped ?? {};
-    const steps = 2 - (skipped.char ? 1 : 0) - (skipped.map ? 1 : 0);
+    const steps = (withPolicies ? 3 : 2) - (skipped.char ? 1 : 0) - (skipped.map ? 1 : 0);
     const isChar = step === 'char';
     const stepNo = isChar || skipped.char ? 1 : 2;
     const ids = isChar ? Object.keys(CHARACTERS) : MAP_ORDER;
@@ -181,7 +204,19 @@ export class Menus {
         this.sfx('click');
         return this.setup('map', pick);
       }
+      if (withPolicies) {
+        this.sfx('click');
+        return this.policies(pick);
+      }
       this.start(pick);
+    };
+    // Hardcore (data/policies.js HARDCORE): a switch under the maps once every map is won.
+    const withHardcore = !isChar && meta.hardcoreOpen();
+    const toggleHardcore = () => {
+      if (!withHardcore) return false;
+      pick.hardcore = !pick.hardcore;
+      this.sfx(pick.hardcore ? 'warn' : 'click');
+      again();
     };
     const back = () => {
       this.sfx('click');
@@ -214,6 +249,7 @@ export class Menus {
       again();
     };
     const tech = CHARACTERS[pick.char];
+    const nextLabel = isChar && !skipped.map ? 'Next: Map' : withPolicies ? 'Next: Policies' : `Clock In: ${MAPS[pick.map].name}${pick.hardcore && withHardcore ? ' (Hardcore)' : ''}`;
     this.show(
       `<div class="panel wide chars setup" tabindex="-1">
         <p class="setup-step">STEP ${stepNo} OF ${steps}</p>
@@ -227,9 +263,16 @@ export class Menus {
                 <span><b>${tech.name}</b><small>Change tech</small></span></button>`
         }
         <div class="cards">${ids.map((id, i) => (isChar ? this.charCard(id, i, pick.char === id, 'PICKED', 'Tap to pick') : this.mapCard(id, i, pick))).join('')}</div>
+        ${
+          withHardcore
+            ? `<button class="hc-switch ${pick.hardcore ? 'on' : ''}" data-act="hardcore" aria-pressed="${!!pick.hardcore}">
+                <span class="switch"></span>${icon('hardcore', 20)}<span><b>HARDCORE</b> ${pick.hardcore ? 'ON' : 'OFF'} <kbd>H</kbd>
+                <small>${HARDCORE.desc}</small></span></button>`
+            : ''
+        }
         <div class="setup-bar">
           <button data-act="back">${isChar || skipped.char ? 'Cancel' : 'Back'} <kbd>Esc</kbd></button>
-          <button class="primary" data-act="next">${isChar && !skipped.map ? 'Next: Map' : `Clock In: ${MAPS[pick.map].name}`} <kbd>Enter</kbd></button>
+          <button class="primary" data-act="next">${nextLabel} <kbd>Enter</kbd></button>
         </div>
       </div>`,
       (code) => {
@@ -238,14 +281,159 @@ export class Menus {
         else if (code === 'ArrowLeft' || code === 'ArrowUp' || code === 'KeyA' || code === 'KeyW') move(-1);
         else if (code === 'Enter' || code === 'Space') next();
         else if (code === 'Escape' || code === 'Backspace') back();
+        else if (code === 'KeyH') return toggleHardcore();
         else return false;
       },
       again,
     );
     this.bind('.card', (i) => choose(i));
+    this.bind('[data-act=hardcore]', toggleHardcore);
     this.bind('[data-act=back]', back);
     this.bind('[data-act=next]', next);
     this.el.querySelector('.card.selected')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Clock In's last step: Shift Policies (data/policies.js). Tap a card to sign up to it or
+  // drop it; the bar shows the pay and score multiplier. Hardcore shifts can't have perks.
+  policies(pick) {
+    const meta = this.meta;
+    const hardcore = !!pick.hardcore && meta.hardcoreOpen();
+    const allowed = (id) => meta.policyUnlocked(id) && (!hardcore || hardcoreOk(id));
+    pick.policies = pick.policies.filter((id) => POLICIES[id] && allowed(id));
+    if (!pick.policies.length) pick.reorg = false;
+    // Redraw after a tap, keeping the list where it was scrolled to.
+    const again = () => {
+      const top = this.el.querySelector('.panel')?.scrollTop ?? 0;
+      this.policies(pick);
+      this.el.querySelector('.panel').scrollTop = top;
+    };
+    const picked = pick.policies;
+    const full = picked.length >= POLICY_RULES.maxPicked;
+    const mult = shiftMult(picked, pick.reorg, hardcore);
+    const clashWith = (id) => picked.find((o) => o !== id && clashes(o, id));
+    const toggle = (id) => {
+      if (!allowed(id)) return;
+      const at = picked.indexOf(id);
+      if (at >= 0) picked.splice(at, 1);
+      else if (full || clashWith(id)) return this.sfx('hurt');
+      else picked.push(id);
+      pick.reorg = false; // hand-picked: no dice bonus
+      this.sfx('click');
+      again();
+    };
+    const reorg = () => {
+      const open = POLICY_ORDER.filter((id) => allowed(id));
+      pick.policies = rollReorg(open);
+      pick.reorg = pick.policies.length > 0;
+      this.sfx('chest');
+      again();
+    };
+    const clear = () => {
+      pick.policies = [];
+      pick.reorg = false;
+      this.sfx('click');
+      again();
+    };
+    // Steps that Clock In skipped (nothing to choose) are skipped on the way back too.
+    const skipped = pick.skipped ?? {};
+    const back = () => {
+      this.sfx('click');
+      if (!skipped.map) this.setup('map', pick);
+      else if (!skipped.char) this.setup('char', pick);
+      else this.title();
+    };
+    const stepNo = 3 - (skipped.char ? 1 : 0) - (skipped.map ? 1 : 0);
+    const card = (id) => {
+      const p = POLICIES[id];
+      const n = POLICY_ORDER.indexOf(id) + 1;
+      const on = picked.includes(id);
+      const unlocked = meta.policyUnlocked(id);
+      const open = allowed(id);
+      const clash = !on && clashWith(id);
+      const status = !unlocked
+        ? `Locked: ${meta.policyLockText(id)}`
+        : !open
+          ? 'Not in Hardcore'
+          : on
+            ? '<b class="ok">SIGNED</b>'
+            : clash
+              ? `Can't combine with ${POLICIES[clash].name}`
+              : full
+                ? ''
+                : '<span class="hint">Tap to sign</span>';
+      const stamp = meta.data.policiesWon.includes(id) ? '<span class="pol-stamp" title="You\'ve won a shift with this">WON</span>' : '';
+      const dim = open && !on && (full || clash);
+      return `<button class="card policy ${p.group} ${on ? 'selected' : ''} ${open ? '' : 'locked'} ${dim ? 'dim' : ''}" data-id="${id}" ${open ? '' : 'disabled'}>
+        <div class="card-head">${icon(unlocked ? p.icon : 'policy', 28)}<div class="card-name"><small>${n}.</small> ${unlocked ? p.name : '???'}</div><b class="pol-x">${fmtMult(p.mult)}</b></div>
+        ${unlocked ? `<div class="card-text">${p.desc}</div>` : ''}
+        ${status || stamp ? `<div class="char-status">${status}${stamp}</div>` : ''}
+      </button>`;
+    };
+    const groups = POLICY_GROUPS.map(
+      (gr) => `<div class="pol-group ${gr.id}">${gr.name.toUpperCase()} <small>${hardcore && gr.id === 'perk' ? 'Off in Hardcore.' : gr.note}</small></div>
+        <div class="cards policies">${POLICY_ORDER.filter((id) => POLICIES[id].group === gr.id).map(card).join('')}</div>`,
+    ).join('');
+    const names = [...(hardcore ? ['Hardcore'] : []), ...picked.map((id) => POLICIES[id].name), ...(pick.reorg ? ['Reorg bonus'] : [])];
+    const summary = names.length ? names.map((n) => `<b>${n}</b>`).join(' + ') : 'No policies: a normal shift.';
+    const bonus = Math.round((POLICY_RULES.reorgBonus - 1) * 100);
+    this.show(
+      `<div class="panel wide chars setup" tabindex="-1">
+        <p class="setup-step">STEP ${stepNo} OF ${stepNo}</p>
+        <h2>SHIFT POLICIES</h2>
+        <p class="sub">Optional. Up to ${POLICY_RULES.maxPicked}. Bad policies raise your Overtime Pay and leaderboard score, perks lower them.</p>
+        <div class="pol-summary"><span>${summary}</span><b class="pol-total ${mult > 1 ? 'up' : mult < 1 ? 'down' : ''}">Pay and score ${fmtMult(mult)}</b></div>
+        <div class="pol-tools">
+          <button data-act="reorg" title="${POLICY_RULES.reorgCount} random bad policies, +${bonus}% while you keep them">🎲 Reorg <kbd>R</kbd></button>
+          <button data-act="clear" ${picked.length ? '' : 'disabled'}>No policies <kbd>N</kbd></button>
+        </div>
+        <p class="pol-note">🎲 Reorg signs you up to ${POLICY_RULES.reorgCount} random bad policies for an extra +${bonus}% while you keep them.</p>
+        ${groups}
+        <div class="setup-bar">
+          <button data-act="back">${stepNo === 1 ? 'Cancel' : 'Back'} <kbd>Esc</kbd></button>
+          <button class="primary" data-act="next">Clock In: ${MAPS[pick.map].name}${hardcore ? ' (Hardcore)' : ''} <kbd>Enter</kbd></button>
+        </div>
+      </div>`,
+      (code) => {
+        if (code === 'Enter' || code === 'Space') this.start(pick);
+        else if (code === 'Escape' || code === 'Backspace') back();
+        else if (code === 'KeyR') reorg();
+        else if (code === 'KeyN') clear();
+        else return false;
+      },
+      again,
+    );
+    this.bind('.card.policy', (i, el) => toggle(el.dataset.id));
+    this.bind('[data-act=reorg]', reorg);
+    this.bind('[data-act=clear]', clear);
+    this.bind('[data-act=back]', back);
+    this.bind('[data-act=next]', () => this.start(pick));
+  }
+
+  // First Clock In ever: offer the training shift (once; it stays on the title screen).
+  trainingOffer() {
+    const m = this.meta;
+    m.data.offeredTraining = true;
+    m.save();
+    const go = (act) => {
+      this.sfx('click');
+      if (act === 'training') this.onTraining();
+      else this.clockIn();
+    };
+    this.show(
+      `<div class="panel training" tabindex="-1">
+        <h2>FIRST DAY?</h2>
+        <p class="sub">A two-minute training shift shows you how to move, close tickets and level up.</p>
+        <button class="primary" data-act="training">Start Training <kbd>Enter</kbd></button>
+        <button data-act="skip">Skip, I know the drill <kbd>Esc</kbd></button>
+        <p class="tiny">You can take training any time from the title screen.</p>
+      </div>`,
+      (code) => {
+        if (code === 'Enter' || code === 'Space' || code === 'KeyT') go('training');
+        else if (code === 'Escape') go('skip');
+        else return false;
+      },
+    );
+    this.bind('button', (i, el) => go(el.dataset.act));
   }
 
   // A tech's card, for the Clock In picker and Characters. Locked techs are hired with

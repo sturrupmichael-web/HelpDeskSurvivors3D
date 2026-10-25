@@ -1,5 +1,4 @@
-// Ported unchanged from the original's src/game/policies.js. Only Meta uses it so far
-// (cleanPolicies, for the save); the policies themselves arrive with M12.
+// Ported unchanged from the original's src/game/policies.js.
 
 // Shift Policies (data/policies.js): combines the picked policies into one set of effects
 // the rest of the game reads from `game.policy`, and works out the pay/score multiplier.

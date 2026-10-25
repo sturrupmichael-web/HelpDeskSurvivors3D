@@ -16,6 +16,9 @@
 // meta.js) and sets `over` to the run's stats until `newRun()`. The one thing the
 // page tells the simulation is what part of the floor is on screen (`view`), which the
 // spawner needs, as the original's spawner needed the canvas size.
+//
+// Each shift runs under a set of Shift Policies (and maybe Hardcore), combined into
+// `policy` (policies.js); the training shift (tutorial.js, `tutorial`) runs with none.
 
 import { CHARACTERS, COMEBACKS } from '../../data/player.js';
 import { MAPS } from '../../data/maps.js';
@@ -46,6 +49,8 @@ import { Achievements } from './achievements.js';
 import { Timeline } from './timeline.js';
 import { performanceReview } from './review.js';
 import { FLOOR_PERKS } from './perks.js';
+import { combinePolicies, NO_POLICY } from './policies.js';
+import { Tutorial } from './tutorial.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
@@ -54,7 +59,8 @@ const VICTORY_DELAY = 3.5; // seconds between closing the final boss and the sum
 export class Sim {
   // Hooks: sfx(name, x), banner(title, text, seconds), shake(amount),
   // burst(x, y, colors, count), number(x, y, amount), ring(x, y, radius, color, life, fill),
-  // text(x, y, words, color), toast(achievement).
+  // text(x, y, words, color), toast(achievement); for the training shift, coach(card or
+  // null), coachProgress(0..1 or null) and device() ('keys', 'touch' or 'pad').
   // `meta`: the save (Overtime Pay, the shop, techs, records); in memory by default.
   constructor(hooks = {}, meta = new Meta()) {
     this.sfx = hooks.sfx ?? noop;
@@ -65,8 +71,13 @@ export class Sim {
     this.ring = hooks.ring ?? noop;
     this.text = hooks.text ?? noop;
     this.toast = hooks.toast ?? noop;
+    this.coach = hooks.coach ?? noop;
+    this.coachProgress = hooks.coachProgress ?? noop;
+    this.device = hooks.device ?? (() => 'keys');
     this.meta = meta;
     this.menu = false; // a menu between shifts is up (the page sets it); the floor waits
+    this.policy = NO_POLICY; // this shift's Shift Policies, combined (policies.js)
+    this.tutorial = null; // the training shift's script, while one runs
     this.floor = new Floor();
     this.twist = new MapTwist();
     this.setMap('office');
@@ -122,16 +133,26 @@ export class Sim {
   }
 
   // A new shift with `charId` on `mapId` (by default the tech and map picked in the save).
-  newRun(charId = this.meta.data.selected, mapId = this.meta.data.map) {
+  // `policy`: the shift's Shift Policies (data/policies.js), by default the saved picks
+  // (and Hardcore, when its switch is on).
+  newRun(
+    charId = this.meta.data.selected,
+    mapId = this.meta.data.map,
+    policy = combinePolicies(this.meta.data.policies, this.meta.data.reorg, this.meta.hardcoreOn()),
+  ) {
     if (this.mapId !== mapId) this.setMap(mapId);
     this.charId = charId;
+    this.policy = policy;
+    this.tutorial = null;
     const def = CHARACTERS[charId];
-    this.player = createPlayer(def, this.meta);
+    this.player = createPlayer(def, this.meta, policy);
     this.player.weapons.push(createWeapon(def.starter, 0));
     if (def.crew) this.player.innate.push(createCrew(def.crew)); // Help Desk Supervisor
     for (const id of def.alsoStarts ?? []) this.player.weapons.push(createWeapon(id, this.player.weapons.length)); // IT Director
-    // Tools, passives and evolutions this save hasn't unlocked yet (data/unlocks.js).
-    this.player.locked = (kind, id) => !this.meta.itemUnlocked(kind, id);
+    // Tools, passives and evolutions this save hasn't unlocked yet (data/unlocks.js), and
+    // passives a policy keeps off the cards (No Pizza Policy: no Snack Drawer).
+    this.player.locked = (kind, id) => !this.meta.itemUnlocked(kind, id) || (kind === 'passives' && policy.lockPassives.includes(id));
+    this.startingTools(policy.startTools);
     this.time = 0;
     this.ticks = 0;
     this.score.reset();
@@ -161,6 +182,48 @@ export class Sim {
     while (this.floor.blocked(p.x, p.y + FOOT)) p.y += 8;
     p.px = p.x;
     p.py = p.y;
+  }
+
+  // Onboarding Buddy / Vendor Lock-In: extra random tools at the start, maybe levelled up,
+  // and with Vendor Lock-In no new tools after that.
+  startingTools(st) {
+    if (!st) return;
+    const p = this.player;
+    const pool = Object.keys(WEAPONS).filter((id) => !WEAPONS[id].evolved && !p.weapons.some((w) => w.id === id) && !p.locked('tools', id));
+    for (let k = 0; k < st.random && pool.length && p.weapons.length < p.maxWeapons; k++) {
+      const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      const w = createWeapon(id, p.weapons.length);
+      setWeaponLevel(w, Math.min(st.level, w.def.levels.length));
+      p.weapons.push(w);
+    }
+    const starter = p.weapons[0];
+    setWeaponLevel(starter, Math.min(st.starterLevel, starter.def.levels.length));
+    if (st.noNewTools) p.maxWeapons = p.weapons.length;
+  }
+
+  // Training shift (tutorial.js): always on the Office with the selected tech, and never
+  // with Shift Policies.
+  startTutorial() {
+    this.newRun(undefined, 'office', NO_POLICY);
+    this.spawner.stopped = true; // the tutorial spawns its own users
+    this.tutorial = new Tutorial(this);
+  }
+
+  // Training done: remember it, then the "you're ready" screen (`over` is { training }).
+  // Not a shift: no pay, no records, no leaderboard.
+  finishTutorial() {
+    this.meta.data.trained = true;
+    this.meta.save();
+    this.coach(null);
+    this.choices = null;
+    this.chest = null;
+    this.sfx('victory');
+    this.over = { training: true };
+  }
+
+  // The training shift's explanation for the level-up cards (or null).
+  get levelUpTip() {
+    return this.tutorial?.levelUpTip() ?? null;
   }
 
 
@@ -206,6 +269,8 @@ export class Sim {
     this.hazards.update(this, dt);
     updateTickets(this, dt);
     updateItems(this, dt); // may open a chest
+    if (this.tutorial) this.tutorial.update(dt);
+    if (this.over) return; // training finished
     const comeback = p.hp <= 0 && COMEBACKS.find((c) => p[c.counter] > 0);
     if (comeback) this.revive(comeback);
     else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest && this.victoryT <= 0) this.openLevelUp();
@@ -267,7 +332,11 @@ export class Sim {
       time: this.time,
       kills: this.score.kills,
       csat: this.score.csat,
-      policies: [], // Shift Policies arrive with M12
+      policies: [...this.policy.ids],
+      reorg: this.policy.reorg,
+      hardcore: this.policy.hardcore,
+      policyMult: this.policy.mult, // includes Hardcore's x2
+      score: Math.round(this.score.csat * this.policy.mult), // what the leaderboard ranks
       evolutions: this.achievements.run.evolutions,
       bestStreak: this.score.bestStreak,
       level: p.level,
@@ -284,7 +353,7 @@ export class Sim {
       }),
       timeline: this.timeline.result(this),
     };
-    const { pay, records, newMap, newUnlocks } = this.meta.finishShift(stats);
+    const { pay, records, newMap, newUnlocks, newPolicies, policiesOpened, hardcoreOpened } = this.meta.finishShift(stats);
     const r = this.achievements.run;
     r.ended = true;
     r.won = won;
@@ -292,7 +361,7 @@ export class Sim {
     r.kills = this.score.kills;
     this.achievements.check();
     const review = performanceReview(stats, r);
-    this.over = { ...stats, pay, records, newMap, newUnlocks, review, balance: this.meta.data.pay };
+    this.over = { ...stats, pay, records, newMap, newUnlocks, newPolicies, policiesOpened, hardcoreOpened, review, balance: this.meta.data.pay };
   }
 
   // --- Bosses -------------------------------------------------------------------------
