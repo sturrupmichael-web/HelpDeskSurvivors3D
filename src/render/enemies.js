@@ -1,10 +1,11 @@
 // Draws the horde: one InstancedMesh per kind of user (from models.js) and its outline,
 // plus one instanced blob shadow for everyone, and the circles some users carry with them
-// (the VIP's aura, Badge Brenda's reader range). Each frame writes matrices into preallocated
+// (the VIP's aura, Badge Brenda's reader range), and what's wrong with each user over their
+// head (stunned, confused, flagged by a tool). Each frame writes matrices into preallocated
 // buffers; nothing is created per user, so a thousand users cost a handful of draw calls.
 
 import * as THREE from 'three';
-import { USER_MODELS, flashToonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
+import { USER_MODELS, STATUS_MODELS, flatMaterial, flashToonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -20,6 +21,7 @@ export class EnemyView {
     this.kinds = new Map(); // sprite id -> InstancedMesh
     for (const [id, build] of Object.entries(USER_MODELS)) {
       const geo = build();
+      geo.computeBoundingBox();
       // Hit flash per instance (see flashToonMaterial).
       const flash = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
       flash.setUsage(THREE.DynamicDrawUsage);
@@ -36,6 +38,7 @@ export class EnemyView {
       ink.frustumCulled = false;
       ink.count = 0;
       mesh.userData.ink = ink;
+      mesh.userData.top = geo.boundingBox.max.y; // where the status markers float
       scene.add(mesh, ink);
       this.kinds.set(id, mesh);
     }
@@ -64,6 +67,16 @@ export class EnemyView {
     this.auraDisc = circle(disc, 0.12);
     this.auraRim = circle(rim, 0.55);
     this.badgeRing = circle(new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2), 0.6);
+    // Status markers: one batch each, facing the camera.
+    this.status = {};
+    for (const [id, build] of Object.entries(STATUS_MODELS)) {
+      const mesh = new THREE.InstancedMesh(build(), flatMaterial, capacity);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      scene.add(mesh);
+      this.status[id] = mesh;
+    }
     this.missing = new Set(); // sprite ids with no model yet (warned once)
   }
 
@@ -73,6 +86,9 @@ export class EnemyView {
     let shadows = 0;
     let auras = 0;
     let badges = 0;
+    const { stun, confuse, mark } = this.status;
+    stun.count = confuse.count = mark.count = 0;
+    const spin = performance.now() / 300;
     const pool = sim.enemies;
     const x0 = rect.x0 - 64;
     const x1 = rect.x1 + 64;
@@ -106,6 +122,12 @@ export class EnemyView {
       mesh.setMatrixAt(mesh.count++, m);
       m.makeScale(s * (e.r / 7), 1, s * (e.r / 7)).setPosition(x, 0.012, z);
       this.shadows.setMatrixAt(shadows++, m);
+      if (e.stun > 0 || e.confuse > 0 || e.mark > 0) {
+        const y = (mesh.userData.top + 0.22) * s;
+        if (e.stun > 0) stun.setMatrixAt(stun.count++, m.makeRotationY(spin + i).scale(scl.set(1.5, 1.5, 1.5)).setPosition(x, y + 0.05, z));
+        else if (e.confuse > 0) confuse.setMatrixAt(confuse.count++, m.makeScale(1.5, 1.5, 1.5).setPosition(x + 0.2, y + Math.sin(e.animT * 6) * 0.06, z));
+        if (e.mark > 0) mark.setMatrixAt(mark.count++, m.makeScale(1.5, 1.5, 1.5).setPosition(x - 0.32, y - 0.05, z));
+      }
       const b = e.def.behavior;
       if (b === 'aura' && auras < 64) {
         const r = px(e.params.radius) * (1 + 0.04 * Math.sin(e.animT * 4));
@@ -124,6 +146,9 @@ export class EnemyView {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.userData.flash.needsUpdate = true;
     }
+    if (stun.count) stun.instanceMatrix.needsUpdate = true;
+    if (confuse.count) confuse.instanceMatrix.needsUpdate = true;
+    if (mark.count) mark.instanceMatrix.needsUpdate = true;
     this.shadows.count = shadows;
     this.shadows.instanceMatrix.needsUpdate = true;
     this.auraDisc.count = this.auraRim.count = auras;

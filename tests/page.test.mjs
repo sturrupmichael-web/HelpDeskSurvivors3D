@@ -60,6 +60,30 @@ export const tests = [
     assert(page.errors.length === 0, page.errors.join('\n'));
     await page.evaluate(() => sim.newRun());
   }],
+  ['every tool in the toolbox draws without errors', async (page) => {
+    await page.evaluate(() => {
+      sim.newRun();
+      sim.player.god = true;
+      sim.player.xpNeed = Infinity; // no level-up cards to stop the clock
+      sim.debugSpawn(150);
+    });
+    // Swap through the whole toolbox, a little game time each, noting what gets drawn.
+    const seen = new Set();
+    const tools = 21; // every tool that isn't an evolution
+    for (let i = 0; i < tools; i++) {
+      const id = await page.evaluate(() => sim.debugSwapWeapon()?.def.behavior);
+      const t0 = await page.evaluate(() => sim.time);
+      await page.waitForFunction((t) => sim.time > t + 0.6, t0, { timeout: 15000 });
+      const drawn = await page.evaluate(() => {
+        const v = view.tools;
+        return v.batches.reduce((n, b) => n + b.mesh.count, 0) + v.propList.reduce((n, b) => n + b.mesh.count, 0) + v.tools.filter((t) => t.meshes.some((m) => m.visible)).length;
+      });
+      if (drawn > 0 && id) seen.add(id);
+    }
+    assert(page.errors.length === 0, page.errors.join('\n'));
+    assert(seen.size >= 8, `only drew ${[...seen].join(', ')}`);
+    await page.evaluate(() => sim.newRun());
+  }],
   ['level-up cards appear and a key picks one', async (page) => {
     await page.evaluate(() => sim.debugLevelUp());
     await page.waitForSelector('.levelup-panel .card', { timeout: 10000 });

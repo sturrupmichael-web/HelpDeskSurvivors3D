@@ -7,6 +7,7 @@ import { FloorView } from './floor.js';
 import { createTechModel, blobShadowGeometry, outlineMaterial, px } from './models.js';
 import { EnemyView } from './enemies.js';
 import { WeaponView } from './weapons.js';
+import { ToolView } from './tools.js';
 import { PickupView } from './pickups.js';
 import { FxView } from './fx.js';
 import { ZoneView } from './zones.js';
@@ -81,6 +82,7 @@ export class View {
 
     this.enemies = new EnemyView(this.scene, sim.enemies.capacity);
     this.weapons = new WeaponView(this.scene);
+    this.tools = new ToolView(this.scene);
     this.pickups = new PickupView(this.scene);
     this.fx = new FxView(this.scene);
     this.zones = new ZoneView(this.scene);
@@ -156,6 +158,7 @@ export class View {
     this.floor.update(this.rig.footprint, this.rig.x, this.rig.z);
     this.enemies.update(this.sim, alpha, this.rig.footprint);
     this.weapons.update(this.sim, alpha, dt, x, z);
+    this.tools.update(this.sim, alpha, dt, x, z);
     this.pickups.update(this.sim, alpha, this.rig.footprint);
     this.fx.update(dt, this.sim.frozen);
     this.zones.update(this.sim);

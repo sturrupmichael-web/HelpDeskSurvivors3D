@@ -68,6 +68,7 @@ export class SettingsPanel {
         <button data-play="boss">Start a boss fight <kbd>B</kbd></button>
         <button data-play="hitboss">Hit the boss for 25% <kbd>K</kbd></button>
         <button data-play="tool">Add a tool <kbd>3</kbd></button>
+        <button data-play="swap">Swap in the next tool <kbd>T</kbd></button>
         <button data-play="levelup">Level up tools <kbd>7</kbd></button>
         <button data-play="xp">Level up (cards) <kbd>8</kbd></button>
         <button data-play="chest">Drop a chest <kbd>9</kbd></button>

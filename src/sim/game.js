@@ -28,7 +28,7 @@ import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
 import { Spawner } from './spawner.js';
 import { WEAPONS } from '../../data/weapons.js';
-import { createWeapon, setWeaponLevel, updateWeapons, weaponReady } from './weapons/index.js';
+import { createWeapon, createCrew, setWeaponLevel, updateWeapons, weaponReady } from './weapons/index.js';
 import { createProjectilePool, updateProjectiles } from './projectiles.js';
 import { TICKETS, MAX_ITEMS } from '../../data/pickups.js';
 import { EVOLUTIONS } from '../../data/evolutions.js';
@@ -107,6 +107,7 @@ export class Sim {
     const def = CHARACTERS[charId];
     this.player = createPlayer(def);
     this.player.weapons.push(createWeapon(def.starter, 0));
+    if (def.crew) this.player.innate.push(createCrew(def.crew)); // Help Desk Supervisor
     this.time = 0;
     this.ticks = 0;
     this.score.reset();
@@ -419,6 +420,23 @@ export class Sim {
     const w = createWeapon(id, p.weapons.length);
     p.weapons.push(w);
     return w;
+  }
+  // Swaps the newest tool for the next one in the toolbox that the tech doesn't have (or
+  // adds one while a slot is free), so every tool can be tried in turn. Returns it.
+  debugSwapWeapon() {
+    const p = this.player;
+    if (p.weapons.length < p.maxWeapons || !p.weapons.length) return this.debugAddWeapon();
+    const ids = Object.keys(WEAPONS).filter((k) => weaponReady(k) && !WEAPONS[k].evolved);
+    const last = p.weapons[p.weapons.length - 1];
+    const from = ids.indexOf(last.def.from ?? last.id);
+    for (let i = 1; i <= ids.length; i++) {
+      const id = ids[(from + i) % ids.length];
+      if (p.weapons.some((w) => w.id === id || w.def.from === id)) continue;
+      const w = createWeapon(id, last.slot);
+      p.weapons[p.weapons.length - 1] = w;
+      return w;
+    }
+    return null;
   }
   // Exactly enough XP for the next level.
   debugLevelUp() {
