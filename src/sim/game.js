@@ -11,8 +11,9 @@
 // Level-ups and Change Approved chests stop the floor until the player answers: the
 // simulation sets `choices` (the cards) or `chest` (what a chest gave), skips ticks while
 // either is set, and the page calls `choose(card)` or `closeChest()`. Pausing works the
-// same way (`paused`), and a burnout, or clocking out after the final boss, sets `over` to
-// the run's stats until `newRun()`. The one thing the
+// same way (`paused`), and so do the menus between shifts (`menu`: title, Clock In, shop).
+// A burnout, or clocking out after the final boss, pays out through `meta` (the save, see
+// meta.js) and sets `over` to the run's stats until `newRun()`. The one thing the
 // page tells the simulation is what part of the floor is on screen (`view`), which the
 // spawner needs, as the original's spawner needed the canvas size.
 
@@ -39,6 +40,11 @@ import { Score } from './score.js';
 import { Zones } from './zones.js';
 import { Hazards } from './hazards.js';
 import { EVENTS } from '../../data/waves.js';
+import { Meta } from './meta.js';
+import { Achievements } from './achievements.js';
+import { Timeline } from './timeline.js';
+import { performanceReview } from './review.js';
+import { FLOOR_PERKS } from './perks.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
@@ -47,8 +53,9 @@ const VICTORY_DELAY = 3.5; // seconds between closing the final boss and the sum
 export class Sim {
   // Hooks: sfx(name, x), banner(title, text, seconds), shake(amount),
   // burst(x, y, colors, count), number(x, y, amount), ring(x, y, radius, color, life, fill),
-  // text(x, y, words, color).
-  constructor(hooks = {}) {
+  // text(x, y, words, color), toast(achievement).
+  // `meta`: the save (Overtime Pay, the shop, techs, records); in memory by default.
+  constructor(hooks = {}, meta = new Meta()) {
     this.sfx = hooks.sfx ?? noop;
     this.banner = hooks.banner ?? noop;
     this.shake = hooks.shake ?? noop;
@@ -56,6 +63,9 @@ export class Sim {
     this.number = hooks.number ?? noop;
     this.ring = hooks.ring ?? noop;
     this.text = hooks.text ?? noop;
+    this.toast = hooks.toast ?? noop;
+    this.meta = meta;
+    this.menu = false; // a menu between shifts is up (the page sets it); the floor waits
     this.mapId = 'office';
     this.map = MAPS[this.mapId];
     this.floor = new Floor();
@@ -81,6 +91,7 @@ export class Sim {
     this.view = { corners: new Float64Array(8), left: 0, right: 0, top: 0, bottom: 0, radius: 0 };
     const [w, h] = HEADLESS_VIEW;
     this.setView([-w / 2, h / 2, w / 2, h / 2, w / 2, -h / 2, -w / 2, -h / 2]);
+    this.achievements = new Achievements(this);
     this.newRun();
   }
 
@@ -102,12 +113,16 @@ export class Sim {
     this.hash.resize(Math.min(128, Math.ceil((reach * 2) / this.hash.cell)));
   }
 
-  newRun(charId = this.charId ?? 'tier1') {
+  // A new shift with `charId` (by default the tech picked in the save).
+  newRun(charId = this.meta.data.selected) {
     this.charId = charId;
     const def = CHARACTERS[charId];
-    this.player = createPlayer(def);
+    this.player = createPlayer(def, this.meta);
     this.player.weapons.push(createWeapon(def.starter, 0));
     if (def.crew) this.player.innate.push(createCrew(def.crew)); // Help Desk Supervisor
+    for (const id of def.alsoStarts ?? []) this.player.weapons.push(createWeapon(id, this.player.weapons.length)); // IT Director
+    // Tools, passives and evolutions this save hasn't unlocked yet (data/unlocks.js).
+    this.player.locked = (kind, id) => !this.meta.itemUnlocked(kind, id);
     this.time = 0;
     this.ticks = 0;
     this.score.reset();
@@ -128,6 +143,9 @@ export class Sim {
     this.bossParts.length = 0;
     this.bossPhase2 = false; // the current fight has reached its second phase (behaviors/phase2.js)
     this.victoryT = 0; // counting down to the summary after the final boss
+    this.perkT = {}; // floor perks (perks.js): seconds since each last fired
+    this.timeline = new Timeline();
+    this.achievements.startRun();
     // Start in a clear spot: walk down from the origin until the feet are off furniture.
     const p = this.player;
     while (this.floor.blocked(p.x, p.y + FOOT)) p.y += 8;
@@ -147,12 +165,12 @@ export class Sim {
 
   // True whenever ticks are skipped: a screen is up, the game is paused or the run is over.
   get frozen() {
-    return this.waiting || this.paused || !!this.over;
+    return this.waiting || this.paused || this.menu || !!this.over;
   }
 
   // Ignored while a screen is already up (the floor is stopped anyway).
   pause() {
-    if (!this.over && !this.waiting) this.paused = true;
+    if (!this.over && !this.waiting && !this.menu) this.paused = true;
   }
 
   resume() {
@@ -170,6 +188,7 @@ export class Sim {
     this.hash.build(this.enemies.items, this.enemies.count, p.x, p.y);
     resolveEnemies(this, dt);
     updateWeapons(this, dt);
+    this.techPerks(dt);
     updateProjectiles(this, dt);
     this.enemies.compact(); // hash indices are stale after this point
     this.zones.update(this, dt);
@@ -180,6 +199,8 @@ export class Sim {
     if (comeback) this.revive(comeback);
     else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest && this.victoryT <= 0) this.openLevelUp();
     this.score.update(dt);
+    this.timeline.update(this);
+    this.achievements.update(dt);
     // Low sanity: you can hear your pulse.
     if (p.hp > 0 && p.hp < p.maxHp * 0.25 && (this.beatT -= dt) <= 0) {
       this.beatT = 0.9;
@@ -187,6 +208,18 @@ export class Sim {
     }
     if (p.hp <= 0) this.endRun(false);
     else if (this.victoryT > 0 && (this.victoryT -= dt) <= 0) this.endRun(true);
+  }
+
+  // Tech perks that act on the floor on a timer (FLOOR_PERKS in perks.js). Not during the
+  // victory walk-off.
+  techPerks(dt) {
+    const d = this.player.def;
+    if (this.spawner.stopped || this.victoryT > 0) return;
+    for (const key in FLOOR_PERKS) {
+      if (d[key] === undefined) continue;
+      this.perkT[key] = (this.perkT[key] ?? 0) + dt;
+      if (FLOOR_PERKS[key](this, d[key], this.perkT[key])) this.perkT[key] = 0;
+    }
   }
 
   // While frozen, everything's previous position is its position, so the renderer's
@@ -204,8 +237,9 @@ export class Sim {
     }
   }
 
-  // The shift is over (burned out, or `won` by closing the final boss): `over` holds what
-  // the summary screen shows.
+  // The shift is over (burned out, or `won` by closing the final boss): pays out and
+  // updates the records (meta.finishShift), checks achievements, writes the performance
+  // review, and `over` holds everything the summary screen shows.
   endRun(won) {
     const p = this.player;
     p.hp = Math.max(0, p.hp);
@@ -214,16 +248,20 @@ export class Sim {
     this.paused = false;
     this.sfx(won ? 'victory' : 'burnout');
     this.shake(won ? 4 : 8);
-    this.over = {
+    const stats = {
       won,
       character: p.def.name,
+      map: this.mapId,
       mapName: this.map.name,
       time: this.time,
       kills: this.score.kills,
       csat: this.score.csat,
+      policies: [], // Shift Policies arrive with M12
+      evolutions: this.achievements.run.evolutions,
       bestStreak: this.score.bestStreak,
       level: p.level,
-      tools: p.weapons
+      payMult: p.def.payMult ?? 1, // IT Director
+      tools: [...p.weapons, ...p.innate]
         .map((w) => ({
           name: w.def.name, icon: w.def.icon, desc: w.def.desc, evolved: !!w.def.evolved, damage: Math.round(w.damageDone),
           level: w.level, maxLevel: w.def.levels.length,
@@ -233,7 +271,17 @@ export class Sim {
         const d = PASSIVES[id];
         return { name: d.name, icon: d.icon, desc: d.desc, level, maxLevel: d.maxLevel };
       }),
+      timeline: this.timeline.result(this),
     };
+    const { pay, records, newMap, newUnlocks } = this.meta.finishShift(stats);
+    const r = this.achievements.run;
+    r.ended = true;
+    r.won = won;
+    r.time = this.time;
+    r.kills = this.score.kills;
+    this.achievements.check();
+    const review = performanceReview(stats, r);
+    this.over = { ...stats, pay, records, newMap, newUnlocks, review, balance: this.meta.data.pay };
   }
 
   // --- Bosses -------------------------------------------------------------------------
@@ -245,6 +293,7 @@ export class Sim {
     this.bossMax = e.maxHp;
     this.bossPhase2 = false;
     this.bossDef = e.def; // the pieces' pool objects may be reused by the time it's over
+    this.achievements.run.bossesMet.push(e.def.sprite); // for the review (and the Knowledge Base, later)
     this.shake(5);
   }
 
@@ -307,6 +356,7 @@ export class Sim {
     } else {
       // A split boss's last piece (no banner of its own) counts as the whole boss.
       const def = e.def.downBanner || !this.bossDef ? e.def : this.bossDef;
+      this.achievements.run.bosses.push(def.sprite);
       const [title, text] = def.downBanner ?? ['BOSS DOWN', 'Grab the Change Approved.'];
       this.banner(title, text, 3);
       dropItem(this, 'chest', e.x, e.y);
@@ -341,9 +391,20 @@ export class Sim {
     if (--this.player.pendingLevels > 0) this.openLevelUp();
   }
 
+  // Escalation Path (shop): new cards for one of the shift's rerolls.
+  reroll() {
+    const p = this.player;
+    const onlyPizza = this.choices?.length === 1 && this.choices[0].kind === 'reward';
+    if (!this.choices || onlyPizza || p.rerolls <= 0) return false;
+    p.rerolls--;
+    this.choices = rollChoices(this);
+    return true;
+  }
+
   // Called by a Change Approved pickup.
   openChest() {
     this.chest = openChest(this);
+    if (this.chest.evolved) this.achievements.run.evolutions++;
     this.sfx('chest');
   }
 
@@ -355,6 +416,8 @@ export class Sim {
   revive(c) {
     const p = this.player;
     p[c.counter]--;
+    this.achievements.run.revived = true;
+    this.timeline.mark(this, 'revive', 'Back from burnout');
     p.hp = p.maxHp * 0.5;
     p.invuln = 3;
     const pool = this.enemies;

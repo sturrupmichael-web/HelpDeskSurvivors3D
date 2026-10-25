@@ -98,6 +98,7 @@ export function applyChoice(game, c) {
     recomputeStats(p);
   } else if (c.kind === 'reward') {
     p.hp = Math.min(p.maxHp, p.hp + FALLBACK_REWARDS[c.id].heal);
+    game.achievements.run.pizzas++;
   }
 }
 

@@ -1,7 +1,6 @@
 // The helpdesk technician: movement, stats (character + shop upgrades + passives), sanity.
 // Ported from the original's src/game/player.js. Differences: the movement axis is passed
-// in (the simulation never reads input devices) and sounds go through `game.sfx`. The
-// Cloud Engineer ramp comes back with the other techs.
+// in (the simulation never reads input devices) and sounds go through `game.sfx`.
 
 import { PASSIVES, MAX_WEAPONS, MAX_PASSIVES } from '../../data/passives.js';
 import { XP_CURVE } from '../../data/player.js';
@@ -9,7 +8,7 @@ import { OVERTIME } from '../../data/waves.js';
 
 const STAT_KEYS = ['moveSpeed', 'attackSpeed', 'area', 'damage', 'growth', 'damageTaken', 'cooldown', 'pickupRadius', 'luck'];
 
-// `meta` supplies permanent shop bonuses (not ported yet); omit it for a bare player.
+// `meta` (src/sim/meta.js) supplies permanent shop bonuses; omit it for a bare player.
 export function createPlayer(def, meta = null) {
   const bonus = {};
   for (const k of STAT_KEYS) bonus[k] = (def.bonus?.[k] ?? 0) + (meta ? meta.bonus(k) : 0);
@@ -56,7 +55,8 @@ export function createPlayer(def, meta = null) {
     xpNeed: xpForLevel(1),
     pendingLevels: 0,
     weapons: [],
-    innate: [],
+    innate: [], // built-in helpers that take no slot (Help Desk Supervisor's team)
+    rampMinutes: 0, // full minutes counted so far by the Cloud Engineer's damage ramp
     passives: {}, // passive id -> level
     // Stat multipliers, recomputed whenever passives change.
     stats: { moveSpeed: 1, attackSpeed: 1, area: 1, damage: 1, growth: 1, damageTaken: 1, cooldown: 1, pickupRadius: 1, maxHp: 1, luck: 1 },
@@ -127,6 +127,15 @@ export function updatePlayer(game, axis, dt) {
   // even a build users can't touch burns out eventually.
   const ot = game.spawner.overtimeLevel(game);
   if (ot && !p.god && game.victoryT <= 0) p.hp -= OVERTIME.drainPerLevel * ot * dt;
+  // Cloud Engineer: damage scales up with every full minute of the shift.
+  if (p.def.damagePerMinute) {
+    const mins = Math.floor(game.time / 60);
+    if (mins !== p.rampMinutes) {
+      p.bonus.damage += (mins - p.rampMinutes) * p.def.damagePerMinute;
+      p.rampMinutes = mins;
+      recomputeStats(p);
+    }
+  }
 }
 
 // Sanity damage. Returns true if any damage was applied.

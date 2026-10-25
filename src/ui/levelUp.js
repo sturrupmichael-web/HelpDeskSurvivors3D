@@ -1,7 +1,7 @@
 // The level-up cards and the Change Approved chest, as HTML over the frozen floor.
 // Ported from the original's src/ui/screens/levelUp.js: the same cards, icons, evolution
 // hints and wording. The simulation decides what's on offer (`sim.choices`, `sim.chest`);
-// this only shows it and reports the pick. Rerolls come back with the shop.
+// this only shows it and reports the pick (and a reroll, with the shop's Escalation Path).
 
 import { icon } from './icons.js';
 import { LEVEL_UP_LINES } from '../../data/flavor.js';
@@ -13,9 +13,10 @@ const pickLine = (list) => list[(Math.random() * list.length) | 0];
 const levelLabel = (c) => (c.kind === 'reward' ? 'Reward' : c.level === 1 ? 'NEW!' : `Level ${c.level}`);
 
 export class LevelUpScreen {
-  // `onPick(card, always)` and `onClose()` go back to the simulation.
-  constructor(root, onPick, onClose) {
+  // `onPick(card, always)`, `onClose()` and `onReroll()` go back to the simulation.
+  constructor(root, onPick, onClose, onReroll) {
     this.onPick = onPick;
+    this.onReroll = onReroll;
     this.onClose = onClose;
     this.el = document.createElement('div');
     this.el.className = 'screen';
@@ -43,13 +44,13 @@ export class LevelUpScreen {
       this.el.hidden = true;
       return;
     }
-    if (sim.choices) this.showCards(sim.choices);
+    if (sim.choices) this.showCards(sim.choices, sim.player.rerolls);
     else this.showChest(sim.chest);
     this.el.hidden = false;
     this.readyAt = performance.now() + READY_DELAY;
   }
 
-  showCards(choices) {
+  showCards(choices, rerolls) {
     this.choices = choices;
     this.onlyPizza = choices.length === 1 && choices[0].kind === 'reward';
     const card = (c, i) => `
@@ -69,6 +70,7 @@ export class LevelUpScreen {
         <p class="sub">${pickLine(LEVEL_UP_LINES)}</p>
         <div class="cards">${choices.map(card).join('')}</div>
         ${this.onlyPizza ? `<button class="always" data-act="always">Everything's maxed: always take the pizza from now on <kbd>A</kbd></button>` : ''}
+        ${rerolls > 0 && !this.onlyPizza ? `<button class="always" data-act="reroll">Escalate: reroll these cards (${rerolls} left) <kbd>R</kbd></button>` : ''}
       </div>`;
   }
 
@@ -103,6 +105,12 @@ export class LevelUpScreen {
     this.onPick(this.choices[i], always);
   }
 
+  reroll() {
+    if (!this.ready || !this.choices) return;
+    this.readyAt = Infinity;
+    this.onReroll();
+  }
+
   close() {
     if (!this.ready || this.choices) return;
     this.readyAt = Infinity;
@@ -114,6 +122,7 @@ export class LevelUpScreen {
     if (!b) return;
     if (b.dataset.i !== undefined) this.pick(Number(b.dataset.i));
     else if (b.dataset.act === 'always') this.pick(0, true);
+    else if (b.dataset.act === 'reroll') this.reroll();
     else if (b.dataset.act === 'ok') this.close();
   }
 
@@ -123,6 +132,7 @@ export class LevelUpScreen {
     if (this.choices) {
       if (DIGITS[code] !== undefined) this.pick(DIGITS[code]);
       else if (this.onlyPizza && code === 'KeyA') this.pick(0, true);
+      else if ((code === 'KeyR' || code === 'PadX') && !this.onlyPizza) this.reroll();
       else if (code === 'PadA') this.pick(0);
     } else if (code === 'Enter' || code === 'Space' || code === 'PadA') this.close();
     return true; // swallow everything else (no pausing or playtest keys mid-choice)

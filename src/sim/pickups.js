@@ -156,6 +156,7 @@ function collect(game, it) {
   const p = game.player;
   const d = it.def;
   game.text(p.x, p.y - 30, d.label, '#ffcd75');
+  if (d.tally) game.achievements.run[d.tally]++;
   if (d.burst) game.burst(p.x, p.y - 8, d.burst[0], d.burst[1]);
   if (d.ring) game.ring(p.x, p.y, d.ring[0], d.ring[1], d.ring[2], d.ring[3]);
   if (d.sound) game.sfx(d.sound);
