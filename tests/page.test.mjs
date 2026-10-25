@@ -42,6 +42,20 @@ export const tests = [
       sim.player.god = false;
     });
   }],
+  ['tools fire and their projectiles are drawn', async (page) => {
+    await page.evaluate(() => {
+      sim.player.god = true;
+      while (sim.debugAddWeapon());
+      sim.debugSpawn(100);
+    });
+    await page.waitForFunction(() => view.weapons.batches.some((m) => m.count > 0) && view.weapons.shields.count > 0, null, { timeout: 15000 });
+    const t0 = await page.evaluate(() => sim.time);
+    await page.waitForFunction((t) => sim.time > t + 1, t0);
+    const kills = await page.evaluate(() => sim.kills);
+    assert(kills > 0, 'nobody was closed');
+    assert(page.errors.length === 0, page.errors.join('\n'));
+    await page.evaluate(() => sim.newRun());
+  }],
   ['quality settings apply', async (page) => {
     await page.click('.gear');
     await page.click('[data-toggle=shadows]');

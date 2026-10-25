@@ -31,9 +31,11 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | F | FPS counter on/off |
 | O (or the gear button) | Settings: shadows, resolution, FPS counter, screen shake, camera tilt and distance, playtest helpers |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
+| 3 | Playtest: add the next tool |
 | 4 | Playtest: skip ahead 1 minute |
 | 5 | Playtest: god mode on/off |
 | 6 | Playtest: clear users |
+| 7 | Playtest: level up every tool |
 | R | Playtest: start a new shift |
 
 ## Project layout
@@ -41,10 +43,10 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 ```
 data/          balance and content, copied from the original (world pixels, as there)
 src/engine/    fixed-timestep loop, input, object pool, spatial hash (ported)
-src/sim/       the simulation: player, users and their behaviors/, spawner and wave timeline,
-               floor layout and collision. No Three.js, no DOM
-src/render/    Three.js: view, follow camera, floor chunks, the instanced horde,
-               models.js (every shape lives here)
+src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
+               projectiles, spawner and wave timeline, floor layout and collision. No Three.js, no DOM
+src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
+               tool effects, models.js (every shape lives here)
 src/ui/        HTML/CSS overlays: settings, FPS counter, touch stick, event banner and clock
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```
@@ -65,6 +67,9 @@ Rules that keep this working:
 - Users are drawn with one `InstancedMesh` per kind plus one instanced blob shadow. A user
   whose behavior hasn't been ported yet is left out of the spawn mix (`src/sim/spawner.js`),
   and a user with no model yet is warned about once in the console and not drawn.
+- Tools work the same way: `src/sim/weapons/index.js` lists the ported behaviors, and only
+  those tools are offered (`weaponReady`). Projectiles share one pool and are drawn with one
+  `InstancedMesh` per sprite id; a projectile with no model yet is drawn as a small cube.
 
 ## Tests
 

@@ -4,6 +4,9 @@ import { Sim } from '../src/sim/game.js';
 import { CHARACTERS } from '../data/player.js';
 import { FOOT } from '../src/sim/player.js';
 import { assert } from './harness.mjs';
+import { WEAPONS } from '../data/weapons.js';
+import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
+import { spawnEnemy } from '../src/sim/enemies.js';
 
 const STEP = 1 / 60;
 const run = (sim, seconds, axis) => {
@@ -90,6 +93,7 @@ tests.push(
     const sim = new Sim();
     const banners = [];
     sim.banner = (t) => banners.push(t);
+    sim.player.weapons.length = 0; // unarmed, so the users get through
     run(sim, 60, { x: 0, y: 0 });
     assert(banners.includes('BURNED OUT'), 'never burned out standing still for a minute');
     assert(sim.time < 60, 'the shift did not restart');
@@ -117,14 +121,92 @@ tests.push(
     for (let i = 0; i < sim.enemies.count; i++) if (sim.enemies.items[i].def.sprite === 'randy_small') small++;
     assert(small === 3, `${small} replies`);
   }],
-  ['a thousand users tick in under 2 ms', () => {
+  ['a thousand users and six tools tick in under 2 ms', () => {
     const sim = new Sim();
     sim.player.god = true;
+    while (sim.debugAddWeapon());
     sim.debugSkip(900);
     sim.debugSpawn(1000);
     const t = performance.now();
     run(sim, 2, { x: 0.5, y: 0.2 });
     const ms = (performance.now() - t) / 120;
     assert(ms < 2, `${ms.toFixed(2)} ms per tick with ${sim.enemies.count} users`);
+  }],
+);
+
+// Milestone 3: tools.
+const still = { x: 0, y: 0 };
+// A bare floor with only the given tool and a ring of users the spawner won't add to.
+function arena(id, users = 24, radius = 60) {
+  const sim = new Sim();
+  sim.floor.solid = false;
+  sim.player.god = true;
+  sim.spawner.update = () => {};
+  sim.enemies.clear();
+  sim.player.weapons = id ? [createWeapon(id, 0)] : [];
+  const p = sim.player;
+  for (let i = 0; i < users; i++) {
+    const a = (i / users) * Math.PI * 2;
+    const r = radius + (i % 3) * 25;
+    spawnEnemy(sim, 'pam', p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, 3);
+  }
+  return sim;
+}
+
+tests.push(
+  ['the starter tool closes users', () => {
+    const sim = new Sim();
+    sim.player.god = true;
+    assert(sim.player.weapons[0]?.id === CHARACTERS.tier1.starter, 'no starter tool');
+    run(sim, 20, still);
+    assert(sim.kills > 0 && sim.player.weapons[0].damageDone > 0, `${sim.kills} users closed`);
+  }],
+  ['every ported tool hits users', () => {
+    const ids = Object.keys(WEAPONS).filter(weaponReady);
+    assert(ids.length >= 10, `only ${ids.length} tools ready`);
+    for (const id of ids) {
+      const sim = arena(id);
+      run(sim, 6, still);
+      assert(sim.player.weapons[0].damageDone > 0, `${id} did no damage`);
+    }
+  }],
+  ['projectiles expire and go back to the pool', () => {
+    const sim = arena('autoClose', 0);
+    run(sim, 1, still); // fires the way the tech faces, at nobody
+    assert(sim.projectiles.count > 0, 'nothing fired');
+    sim.player.weapons.length = 0;
+    run(sim, WEAPONS.autoClose.levels[0].life + 0.1, still);
+    assert(sim.projectiles.count === 0, `${sim.projectiles.count} projectiles left`);
+  }],
+  ['KB Articles fly out their range and come back', () => {
+    const sim = arena('kbArticle', 0);
+    const p = sim.player;
+    let far = 0;
+    let fired = false;
+    for (let i = 0; i < 60 * 2.8; i++) {
+      sim.tick(STEP, still);
+      const o = sim.projectiles.items[0];
+      if (sim.projectiles.count) {
+        fired = true;
+        far = Math.max(far, Math.hypot(o.x - p.x, o.y - p.y));
+      }
+    }
+    const range = WEAPONS.kbArticle.levels[0].range;
+    assert(fired, 'never thrown');
+    assert(Math.abs(far - range) < 15, `flew ${far.toFixed(0)} px for a ${range} px range`);
+    assert(sim.projectiles.count === 0, 'did not come back');
+  }],
+  ['the shockwave knocks users back', () => {
+    // The same crowd with and without the tool, just after the first pulse (at 0.5 s).
+    const avg = (sim) => {
+      let d = 0;
+      for (let i = 0; i < sim.enemies.count; i++) d += Math.hypot(sim.enemies.items[i].x - sim.player.x, sim.enemies.items[i].y - sim.player.y);
+      return d / sim.enemies.count;
+    };
+    const armed = arena('reboot', 8, 30);
+    const bare = arena(null, 8, 30);
+    run(armed, 0.8, still);
+    run(bare, 0.8, still);
+    assert(avg(armed) > avg(bare) + 5, `users ${avg(armed).toFixed(0)} px away, ${avg(bare).toFixed(0)} without the tool`);
   }],
 );

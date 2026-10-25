@@ -57,6 +57,8 @@ export class SettingsPanel {
       <div class="grid">
         <button data-play="spawn50">+50 users <kbd>1</kbd></button>
         <button data-play="spawn300">+300 users <kbd>2</kbd></button>
+        <button data-play="tool">Add a tool <kbd>3</kbd></button>
+        <button data-play="levelup">Level up tools <kbd>7</kbd></button>
         <button data-play="skip">Skip 1 minute <kbd>4</kbd></button>
         <button data-play="god">God mode <kbd>5</kbd></button>
         <button data-play="clear">Clear users <kbd>6</kbd></button>
