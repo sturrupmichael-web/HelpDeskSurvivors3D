@@ -373,11 +373,11 @@ export const PICKUP_MODELS = {
   ticket_gold: () => stub(P.y),
   // Leftover Vendor-Lunch Pizza: a slice, tip first.
   pizza: () => merge([
-    paint(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 3), P.y, 0, 0, 0.06, 0, Math.PI, 0),
-    box(0.68, 0.1, 0.12, P.d, 0, -0.04, -0.17),
-    cyl(0.06, 0.06, 0.1, P.r, -0.1, -0.03, -0.02, 6),
-    cyl(0.06, 0.06, 0.1, P.r, 0.12, -0.03, -0.04, 6),
-    cyl(0.05, 0.05, 0.1, P.r, 0.0, -0.03, 0.2, 6),
+    paint(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 3), P.y, 0, 0, 0.06, 0, Math.PI, 0), // tip toward -z
+    box(0.78, 0.13, 0.12, P.d, 0, -0.05, 0.27), // crust along the wide end
+    cyl(0.06, 0.06, 0.1, P.r, -0.1, -0.03, 0.1, 6),
+    cyl(0.06, 0.06, 0.1, P.r, 0.11, -0.03, 0.08, 6),
+    cyl(0.05, 0.05, 0.1, P.r, 0.0, -0.03, -0.1, 6),
   ]),
   // Bulk Close: the big CLOSED stamp.
   bulk_close: () => merge([
