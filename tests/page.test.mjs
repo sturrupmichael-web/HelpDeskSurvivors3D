@@ -212,4 +212,33 @@ export const tests = [
     await page.waitForTimeout(200);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['L unlocks the next map, and picking it on Clock In shows its floor', async (page) => {
+    // The Executive test above won a shift in the Open Office, which opened the Server Room.
+    await page.keyboard.press('KeyL');
+    await page.waitForFunction(() => sim.meta.mapUnlocked('callcenter'));
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-panel', { timeout: 5000 });
+    await page.keyboard.press('KeyQ');
+    await page.keyboard.press('KeyQ'); // sure
+    await page.waitForSelector('.panel.title', { timeout: 5000 });
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.setup', { timeout: 5000 });
+    if (await page.$('.setup .card.char')) await page.keyboard.press('Enter'); // on to the map
+    await page.waitForSelector('.setup .card.map', { timeout: 5000 });
+    await page.keyboard.press('Digit3'); // Call Center
+    await page.waitForFunction(() => sim.menu && sim.mapId === 'callcenter' && view.floor.style === 'callcenter', null, { timeout: 10000 });
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.menu && sim.mapId === 'callcenter' && sim.meta.data.map === 'callcenter');
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['every map draws, and the Night Shift is lit by a flashlight', async (page) => {
+    for (const map of ['server', 'garage', 'merger', 'office']) {
+      await page.evaluate((m) => sim.newRun(sim.charId, m), map);
+      await page.waitForFunction((m) => view.floor.style === m && view.floor.chunks.size > 0, map, { timeout: 10000 });
+      const s = await page.evaluate(() => ({ calls: view.renderer.info.render.calls, light: view.flashlight.visible }));
+      assert(s.calls > 3, `${map}: ${s.calls} draw calls`);
+      assert(s.light === (map === 'garage'), `${map}: flashlight ${s.light}`);
+    }
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
 ];

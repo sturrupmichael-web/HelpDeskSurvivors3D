@@ -16,9 +16,10 @@ import { GameOverScreen } from './ui/gameOver.js';
 import { Menus } from './ui/menus.js';
 import { Meta } from './sim/meta.js';
 import { Floaters } from './ui/floaters.js';
-import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusic, stopMusic, duckMusic } from './engine/audio.js';
+import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusic, stopMusic, duckMusic, setMusicStyle } from './engine/audio.js';
 import { setHaptics } from './engine/haptics.js';
 import { VERSION } from './version.js';
+import { MAPS, MAP_ORDER } from '../data/maps.js';
 
 const canvas = document.getElementById('game');
 const ui = document.getElementById('ui');
@@ -50,6 +51,7 @@ const sim = new Sim({
   text: (x, y, words, color) => floaters.text(x, y, words, color),
   toast: (a) => hud.toast(a),
 }, meta);
+setMusicStyle(sim.map.music);
 // Antialiasing is fixed when the renderer is made: off on phones, where it costs most.
 view = new View(canvas, sim, { antialias: !isTouchDevice() });
 const fps = new FpsCounter(ui);
@@ -79,16 +81,17 @@ const menus = new Menus(ui, {
   sim,
   portrait: (id) => view.portrait(id),
   onStart: () => newShift(),
-  onPreview: () => reset(),
+  onPreview: (tech, map) => reset(tech, map),
   onSettings: () => panel.toggle(true),
   sfx,
 });
 // The gear and Settings panel go on top of the screens, and the toasts on top of those.
 ui.append(panel.button, panel.panel, hud.toasts);
 
-// A fresh floor with the picked tech on it.
-function reset() {
-  sim.newRun();
+// A fresh floor with the picked tech on it (or `tech` on `map`, previewed from the menus).
+function reset(tech, map) {
+  sim.newRun(tech, map);
+  setMusicStyle(sim.map.music); // each map has its own remix
   view.resetCamera();
   view.fx.clear();
   floaters.clear();
@@ -160,6 +163,16 @@ function playtest(act) {
     meta.save();
     menus.refresh();
     banner.show('+$1,000 OVERTIME PAY', `Balance: $${meta.data.pay.toLocaleString()}. Spend it in the Overtime Shop or on a new tech.`, 2);
+  } else if (act === 'map') {
+    // Counts a win on the map before the next locked one, as if you'd clocked out there:
+    // that opens the map, and whatever that win unlocks (data/unlocks.js).
+    const next = MAP_ORDER.find((id) => !meta.mapUnlocked(id));
+    if (!next) return banner.show('EVERY MAP IS OPEN', 'Pick one when you Clock In.', 2);
+    const won = MAPS[next].unlockAfter;
+    meta.data.mapsWon.push(won);
+    meta.save();
+    menus.refresh();
+    banner.show(`${MAPS[next].name.toUpperCase()} UNLOCKED`, `Counted a win in the ${MAPS[won].name}, with everything it unlocks.`, 2.5);
   } else if (act === 'wipe') {
     meta.reset();
     toMenu().title();
@@ -185,6 +198,7 @@ onKeyPress((code) => {
   if (code === 'KeyM') mute();
   else if (code === 'KeyO') panel.toggle(true);
   else if (code === 'KeyG') playtest('pay'); // works on the menus too, to try the shop and techs
+  else if (code === 'KeyL') playtest('map'); // ...and so does this, to try the maps
   else if (sim.over || sim.waiting || sim.menu) return;
   else if (code === 'Escape' || code === 'KeyP' || code === 'PadStart') sim.pause();
   else if (PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);

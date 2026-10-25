@@ -494,13 +494,16 @@ tests.push(
     const sim = new Sim({}, meta);
     assert(sim.charId === 'desktop' && sim.player.maxHp === 100, `maxHp ${sim.player.maxHp}`); // 90 + chair
   }],
-  ['map-win unlocks wait for their map, and only built maps open', () => {
+  ['map-win unlocks wait for their map, and each win opens the next map', () => {
     const meta = new Meta();
     assert(meta.mapUnlocked('office') && !meta.mapUnlocked('server'), 'maps');
-    // The Server Room isn't built yet, so what winning it unlocks stays open.
-    assert(meta.itemUnlocked('tools', 'replyAll') && meta.itemUnlocked('characters', 'neteng'), 'locked behind an unbuilt map');
+    assert(!meta.selectMap('server') && meta.data.map === 'office', 'picked a locked map');
+    // What a Server Room win unlocks waits for it.
+    assert(!meta.itemUnlocked('tools', 'replyAll') && !meta.itemUnlocked('characters', 'neteng'), 'Server Room unlocks open early');
     const r = meta.finishShift({ won: true, map: 'office', time: 1250, kills: 5000, csat: 90000, tools: [] });
-    assert(r.newMap === null && meta.data.mapsWon.includes('office'), 'office win');
+    assert(r.newMap === 'server' && meta.mapUnlocked('server') && meta.selectMap('server'), `office win opened ${r.newMap}`);
+    const r2 = meta.finishShift({ won: true, map: 'server', time: 1250, kills: 5000, csat: 90000, tools: [] });
+    assert(r2.newMap === 'callcenter' && meta.itemUnlocked('tools', 'replyAll') && r2.newUnlocks.some((u) => u.id === 'neteng'), 'server win');
   }],
   ['the IT Director starts with Delegate and earns more', () => {
     const sim = new Sim({}, new Meta());
@@ -534,5 +537,151 @@ tests.push(
     const d = upgradeSave({ pay: -5, unlocked: ['nobody'], selected: 'nobody', shop: { chair: 99, gone: 2 } });
     assert(d.pay === 0 && d.selected === 'tier1' && d.unlocked.join() === 'tier1', JSON.stringify(d));
     assert(d.shop.chair === 5 && !('gone' in d.shop), JSON.stringify(d.shop));
+  }],
+);
+
+// Milestone 11: the other maps.
+// A shift on `map` with a save that has every map open.
+function onMap(map) {
+  const meta = new Meta();
+  meta.data.mapsWon.push('office', 'server', 'callcenter', 'garage');
+  meta.selectMap(map);
+  const sim = new Sim({}, meta);
+  sim.player.god = true;
+  return sim;
+}
+
+tests.push(
+  ['each map has its own floor, solid furniture, and starts the tech off it', () => {
+    const solid = { server: 0, callcenter: 0, garage: 0, merger: 0 };
+    for (const map of Object.keys(solid)) {
+      const sim = onMap(map);
+      assert(sim.mapId === map && sim.floor.style === map, `${map}: style ${sim.floor.style}`);
+      assert(!sim.floor.blocked(sim.player.x, sim.player.y + FOOT), `${map}: started inside furniture`);
+      for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) solid[map] += sim.floor.layout(cx, cy).solids.length;
+      assert(solid[map] > 10, `${map}: only ${solid[map]} solid rects`);
+    }
+  }],
+  ['Server Room hot aisles drain sanity and speed the tech up', () => {
+    const sim = onMap('server');
+    sim.player.god = false;
+    sim.spawner.update = () => {};
+    let hot = null;
+    for (let cx = 0; cx < 10 && !hot; cx++) hot = sim.floor.layout(cx, 0).hot;
+    assert(hot, 'no hot aisle nearby');
+    const p = sim.player;
+    p.x = hot[0] + hot[2] / 2;
+    p.y = hot[1] + hot[3] / 2 - FOOT;
+    p.invuln = 0;
+    sim.tick(STEP, still);
+    assert(sim.twist.hot && p.hp < p.maxHp, `hot ${sim.twist.hot}, hp ${p.hp}`);
+    assert(Math.abs(p.slow - 1.3) < 1e-9, `slow ${p.slow}`);
+  }],
+  ['Call Center desk phones go off near the tech', () => {
+    const sim = onMap('callcenter');
+    sim.spawner.update = () => {};
+    run(sim, 5, still);
+    assert(sim.hazards.bombs.count >= 1, 'no phone rang');
+    const b = sim.hazards.bombs.items[0];
+    assert(Math.hypot(b.x - sim.player.x, b.y - sim.player.y) <= 141, 'phone too far away');
+  }],
+  ['Merger Day: the parent company takes over more floor, with tougher users and double tickets on it', () => {
+    const sim = onMap('merger');
+    run(sim, 0.1, still);
+    const start = sim.floor.share;
+    sim.time = 125;
+    run(sim, 0.1, still);
+    assert(Math.abs(start - 0.3) < 1e-9 && sim.floor.share > start, `share ${start} -> ${sim.floor.share}`);
+    let acquired = null;
+    let legacy = null;
+    for (let cx = -6; cx <= 6; cx++)
+      for (let cy = -6; cy <= 6; cy++) {
+        if (sim.floor.acquiredChunk(cx, cy)) acquired ??= [cx * 256 + 128, cy * 256 + 128];
+        else legacy ??= [cx * 256 + 128, cy * 256 + 128];
+      }
+    const a = spawnEnemy(sim, 'pam', ...acquired, 1);
+    const b = spawnEnemy(sim, 'pam', ...legacy, 1);
+    assert(Math.abs(a.maxHp / b.maxHp - 1.2) < 1e-9, `hp ${a.maxHp} vs ${b.maxHp}`);
+    assert(sim.twist.xpMult(sim, ...acquired) === 2 && sim.twist.xpMult(sim, ...legacy) === 1, 'tickets');
+    // Moving boxes keep turning up, three at most.
+    sim.spawner.update = () => {};
+    sim.player.weapons = [];
+    run(sim, 90, still);
+    let boxes = 0;
+    for (let i = 0; i < sim.enemies.count; i++) if (sim.enemies.items[i].def.anchored) boxes++;
+    assert(boxes === 3, `${boxes} boxes`);
+  }],
+  ['Merger Day brings its own users, and the Server Room more Shadow IT', () => {
+    const count = (map, t) => {
+      const sim = onMap(map);
+      sim.time = t;
+      const seen = {};
+      for (let i = 0; i < 4000; i++) {
+        const e = sim.spawner.spawn(sim);
+        seen[e.def.sprite] = (seen[e.def.sprite] ?? 0) + 1;
+        e.dead = true;
+        sim.enemies.compact();
+      }
+      return seen;
+    };
+    const merger = count('merger', 300);
+    assert(merger.dave > 100 && merger.consultant > 50 && merger.brenda > 50, JSON.stringify(merger));
+    const office = count('office', 300);
+    assert(!office.dave && !office.brenda, 'Merger Day users in the office');
+    const server = count('server', 900);
+    const office2 = count('office', 900);
+    assert(server.steve > office2.steve * 1.2, `steve ${server.steve} vs ${office2.steve}`);
+  }],
+  ['each map has its own boss at 10:00', () => {
+    const want = { office: 'incident', server: 'ratsnest', callcenter: 'caller', garage: 'janitor', merger: 'takeover' };
+    for (const [map, boss] of Object.entries(want)) {
+      const sim = onMap(map);
+      sim.time = 599.9;
+      run(sim, 0.2, still);
+      assert(sim.bossAlive() && sim.boss.def.sprite === boss, `${map}: ${sim.boss?.def.sprite}`);
+    }
+  }],
+  ["the Rat's Nest splits into three, and the fight lasts until all are down", () => {
+    const sim = onMap('server');
+    sim.debugBoss();
+    const e = sim.boss;
+    damageEnemy(sim, e, e.maxHp * 0.55, null, 0, 0, 0);
+    run(sim, 0.1, still);
+    assert(sim.bossParts.length === 3 && e.ai.small, `${sim.bossParts.length} pieces`);
+    for (const [part] of sim.bossParts) damageEnemy(sim, part, part.hp + 1, null, 0, 0, 0);
+    run(sim, 0.1, still);
+    assert(!sim.bossAlive() && sim.items.count > 0, 'no chest after the last nest');
+  }],
+  ['the Night Janitor turns the lights out, and leaves wet floor', () => {
+    const sim = onMap('garage');
+    sim.spawner.update = () => {};
+    sim.debugBoss();
+    const e = sim.boss;
+    e.ai.lastAttack = 'mop';
+    for (let i = 0; i < 20 && sim.twist.dimT <= 0; i++) {
+      e.ai.attackIn = 0;
+      e.ai.state = 0;
+      e.ai.lastAttack = '';
+      run(sim, 0.7, still);
+    }
+    assert(sim.twist.dimT > 0, 'lights stayed on');
+    let wet = 0;
+    for (let i = 0; i < sim.zones.pool.count; i++) if (sim.zones.pool.items[i].slip) wet++;
+    assert(wet > 0, 'no wet floor');
+  }],
+  ['the Hostile Takeover absorbs users, and spins off a Subsidiary', () => {
+    const sim = onMap('merger');
+    sim.spawner.update = () => {};
+    sim.debugBoss();
+    sim.player.weapons = [];
+    const e = sim.boss;
+    e.hp = e.maxHp * 0.6;
+    for (let i = 0; i < 6; i++) spawnEnemy(sim, 'pam', e.x + 4, e.y + 2, 1);
+    e.ai.absorbBudget = 6;
+    run(sim, STEP, still);
+    assert(e.hp > e.maxHp * 0.6 && e.scale > 1, `hp ${e.hp / e.maxHp}, scale ${e.scale}`);
+    damageEnemy(sim, e, e.maxHp * 0.2, null, 0, 0, 0);
+    run(sim, 0.1, still);
+    assert(sim.bossParts.length === 2 && sim.bossParts[1][0].def.sprite === 'subsidiary', 'no Subsidiary');
   }],
 );

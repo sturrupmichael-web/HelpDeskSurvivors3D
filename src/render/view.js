@@ -16,6 +16,17 @@ import { HazardView } from './hazards.js';
 import { FOOT } from '../sim/player.js';
 
 const BACKGROUND = '#1a1c2c'; // the original's near-black navy
+
+// Each map's light: the background (and fog) colour, the sky/floor fill and the sun.
+// `dark` maps (Night Shift) put out the lights and give the tech a flashlight instead.
+const LOOKS = {
+  office: { bg: BACKGROUND, sky: '#e4ecff', ground: '#4a4550', hemi: 1.9, sun: '#fff1dc', sunI: 2.4 },
+  server: { bg: '#11131f', sky: '#bcd4ff', ground: '#2a2f45', hemi: 1.5, sun: '#d8e6ff', sunI: 2.0 },
+  callcenter: { bg: '#161a30', sky: '#e8eeff', ground: '#3a3f60', hemi: 1.9, sun: '#fff6e8', sunI: 2.3 },
+  garage: { bg: '#07080d', sky: '#8090c0', ground: '#101018', hemi: 0.1, sun: '#8090c0', sunI: 0.08, dark: true },
+  merger: { bg: BACKGROUND, sky: '#eef2ff', ground: '#4a4a5a', hemi: 2.0, sun: '#fff4e4', sunI: 2.5 },
+};
+const FLASHLIGHT = 9; // the flashlight's intensity at full radius
 const SHADOW_SPAN = 30; // half-size of the sun's shadow box, scene units
 const TURN_RATE = 14; // how fast the tech turns to face where they walk (1/s)
 
@@ -56,6 +67,12 @@ export class View {
     this.scene.add(this.sun, this.sun.target);
 
     this.floor = new FloorView(this.scene, sim.floor);
+    // The Night Shift's flashlight: a light that follows the tech (data/maps.js twist `dark`).
+    this.flashlight = new THREE.PointLight('#fff4d8', 0, 1, 0.6);
+    this.flashlight.visible = false;
+    this.scene.add(this.flashlight);
+    this.mapId = null;
+    this.quality = null;
 
     this.tech = null;
     this.techId = null;
@@ -100,11 +117,12 @@ export class View {
 
   // { shadows: bool, outlines: bool, resolution: 'low' | 'medium' | 'high' }
   applyQuality({ shadows, outlines = true, resolution }) {
+    this.quality = { shadows, outlines, resolution };
     outlineMaterial.visible = outlines; // outlines redraw every person, so they're optional
     const r = this.renderer;
     r.setPixelRatio((RESOLUTIONS[resolution] ?? RESOLUTIONS.high)());
     r.shadowMap.enabled = shadows;
-    this.sun.castShadow = shadows;
+    this.sun.castShadow = shadows && !this.look?.dark; // no sun to cast them in the dark
     const map = resolution === 'low' ? 1024 : 2048;
     if (this.sun.shadow.mapSize.x !== map) {
       this.sun.shadow.mapSize.set(map, map);
@@ -178,6 +196,35 @@ export class View {
     return url;
   }
 
+  // Lights the scene for the sim's map (LOOKS).
+  setMapLook(id) {
+    this.mapId = id;
+    const look = (this.look = LOOKS[id] ?? LOOKS.office);
+    this.scene.background.set(look.bg);
+    this.scene.fog.color.set(look.bg);
+    this.hemi.color.set(look.sky);
+    this.hemi.groundColor.set(look.ground);
+    this.hemi.intensity = look.hemi;
+    this.sun.color.set(look.sun);
+    this.sun.intensity = look.sunI;
+    this.flashlight.visible = !!look.dark;
+    if (this.quality) this.applyQuality(this.quality);
+  }
+
+  // The flashlight's reach this frame: the map's radius, wobbling a little, and shrunk
+  // while the Night Janitor has the lights out (eased down, then back up over the last
+  // second), as the original's darkness overlay.
+  updateFlashlight(x, z) {
+    const tw = this.sim.map.twist;
+    const twist = this.sim.twist;
+    const wobble = 1 - tw.flicker * (Math.sin(performance.now() / 70) * 0.5 + 0.5) * (Math.random() < 0.03 ? 3 : 1);
+    const dim = twist.dimT > 0 ? 1 - (1 - twist.dimScale) * Math.min(1, twist.dimT) : 1;
+    const r = px(tw.radius) * wobble * dim;
+    this.flashlight.position.set(x, 2.6, z);
+    this.flashlight.distance = r * 1.1;
+    this.flashlight.intensity = FLASHLIGHT * (0.6 + 0.4 * dim);
+  }
+
   setCamera(opts) {
     this.rig.setOptions(opts);
   }
@@ -217,7 +264,9 @@ export class View {
     this.updateTech(x, z, dt);
     this.rig.update(x, z, dt);
     this.sim.setView(this.rig.footprint.corners); // the spawner needs to know what's on screen
-    this.floor.update(this.rig.footprint, this.rig.x, this.rig.z);
+    if (this.sim.mapId !== this.mapId) this.setMapLook(this.sim.mapId);
+    if (this.look.dark) this.updateFlashlight(x, z);
+    this.floor.update(this.rig.footprint, this.rig.x, this.rig.z, this.sim.time);
     this.enemies.update(this.sim, alpha, this.rig.footprint);
     this.weapons.update(this.sim, alpha, dt, x, z);
     this.tools.update(this.sim, alpha, dt, x, z);

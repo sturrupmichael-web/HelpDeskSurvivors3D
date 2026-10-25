@@ -47,11 +47,12 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | 9 | Playtest: drop a Change Approved chest |
 | 0 | Playtest: evolution kit (max tools + paired passives, and a chest) |
 | U | Playtest: one of each user in a ring around you |
-| B (or =) | Playtest: start the next boss fight now (the Major Incident before 10:00, then the Executive) |
+| B (or =) | Playtest: start the next boss fight now (the map's own boss before 10:00, then the Executive) |
 | K | Playtest: knock a quarter of its HP off the boss (to see its phases and the ending) |
 | 1–4 / tap | Pick a level-up card |
 | R | Playtest: start a new shift |
 | G | Playtest: +$1,000 Overtime Pay (works on the menus too). Settings also has Wipe the save |
+| L | Playtest: unlock the next map, as if you'd won a shift on the one before it (works on the menus too) |
 
 ## Project layout
 
@@ -62,7 +63,8 @@ src/engine/    fixed-timestep loop, input, object pool, spatial hash, synthesize
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
                projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
                (upgrades.js), CSAT score (score.js), floor zones such as paper jams (zones.js), boss
-               attacks (hazards.js), spawner and wave timeline, floor layout and collision, the
+               attacks (hazards.js), spawner and wave timeline, the five maps' floor layouts and
+               collision (floor.js) and their twists (maps.js), the
                save with Overtime Pay, the shop and unlocks (meta.js), achievements, tech perks
                (perks.js), the shift timeline and the performance review. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
@@ -87,8 +89,10 @@ Rules that keep this working:
   toon-shaded, everything else flat-shaded, and people and furniture get ink outlines
   (an inverted hull, toggled in Settings). To use real art later, swap an entry there for a
   loaded glTF.
-- The furniture layout is the original's, chunk for chunk (same seeded RNG sequence), so the
-  cubicles stand where they did in 2D.
+- The furniture layout is the original's, chunk for chunk (same seeded RNG sequence), on every
+  map, so the cubicles, racks, pods and parked cars stand where they did in 2D. Each map has
+  its own light in `src/render/view.js` (LOOKS); the Night Shift turns it off and gives the
+  tech a flashlight.
 - The visible floor is a trapezoid in 3D. The renderer passes its corners to the simulation
   each frame (`sim.setView`), and the spawner places users just outside that shape.
 - Users are drawn with one `InstancedMesh` per kind plus one instanced blob shadow. A user

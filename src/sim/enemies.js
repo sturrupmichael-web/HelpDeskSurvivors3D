@@ -1,7 +1,6 @@
 // End-user horde: pooled enemy objects, movement via behaviors, separation, contact
 // damage, damage and death. Ported from the original's src/game/enemies.js with the
-// drawing removed. Not yet ported (they return with their milestones): map twists and
-// Shift Policies.
+// drawing removed. Not yet ported: Shift Policies (M12).
 
 import { ENEMIES } from '../../data/enemies.js';
 import { BEHAVIORS } from './behaviors/index.js';
@@ -57,9 +56,10 @@ export function spawnEnemy(game, id, x, y, hpMult = 1, speedMult = 1, behaviorId
   e.r = def.radius;
   e.foot = def.foot ?? DEFAULT_FOOT;
   e.kx = e.ky = e.dx = e.dy = 0;
-  // The map toughens regular users (bosses keep their tuned HP).
+  // The map (and where on it they spawn: Merger Day's acquired floor) toughens regular
+  // users; bosses keep their tuned HP.
   const map = def.boss ? null : game.map;
-  e.hp = e.maxHp = def.hp * hpMult * (map?.hpMult ?? 1);
+  e.hp = e.maxHp = def.hp * hpMult * (map?.hpMult ?? 1) * (map ? game.twist.hpMult(game, x, y) : 1);
   e.speed = def.speed * speedMult * (map?.speedMult ?? 1);
   e.damage = def.damage;
   e.xp = def.xp;
@@ -311,7 +311,7 @@ export function killEnemy(game, e, weapon) {
     game.sfx('combo');
   }
   if (e.xp > 0) {
-    const xp = e.xp * e.tagXp;
+    const xp = e.xp * e.tagXp * game.twist.xpMult(game, e.x, e.y);
     if (weapon?.def.merge) weapon.mergeXp += xp;
     else {
       const t = dropTicket(game, e.x, e.y, xp);
