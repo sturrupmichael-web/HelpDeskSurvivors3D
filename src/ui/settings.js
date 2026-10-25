@@ -10,6 +10,7 @@ export function defaultSettings() {
   return {
     shadows: !phone, // real shadows from the sun (off: blob shadows only)
     outlines: true, // ink outlines round people and furniture
+    lod: phone, // users far from the camera drawn simpler, without outlines
     resolution: phone ? 'low' : 'high', // pixel ratio: low 1x, medium 1.5x, high native (max 2x)
     fps: false, // on-screen FPS counter
     shake: true, // screen shake
@@ -18,7 +19,7 @@ export function defaultSettings() {
     sfx: 1, // sound effect volume (0..1); M mutes everything
     music: 0.7, // music volume (0..1)
     vibration: true, // phone buzzes on hits, level-ups and burnout
-    // Camera tuning for playtesting (src/render/cameraRig.js).
+    // Camera tilt and distance (src/render/cameraRig.js).
     tilt: 55,
     zoom: 1,
   };

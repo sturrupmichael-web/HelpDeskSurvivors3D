@@ -115,9 +115,10 @@ export class View {
     this.resetCamera();
   }
 
-  // { shadows: bool, outlines: bool, resolution: 'low' | 'medium' | 'high' }
-  applyQuality({ shadows, outlines = true, resolution }) {
-    this.quality = { shadows, outlines, resolution };
+  // { shadows: bool, outlines: bool, resolution: 'low' | 'medium' | 'high', lod: bool }
+  applyQuality({ shadows, outlines = true, resolution, lod = false }) {
+    this.quality = { shadows, outlines, resolution, lod };
+    this.enemies.lod = lod; // far users in low detail
     outlineMaterial.visible = outlines; // outlines redraw every person, so they're optional
     const r = this.renderer;
     r.setPixelRatio((RESOLUTIONS[resolution] ?? RESOLUTIONS.high)());
@@ -267,7 +268,7 @@ export class View {
     if (this.sim.mapId !== this.mapId) this.setMapLook(this.sim.mapId);
     if (this.look.dark) this.updateFlashlight(x, z);
     this.floor.update(this.rig.footprint, this.rig.x, this.rig.z, this.sim.time);
-    this.enemies.update(this.sim, alpha, this.rig.footprint);
+    this.enemies.update(this.sim, alpha, this.rig.footprint, x, z);
     this.weapons.update(this.sim, alpha, dt, x, z);
     this.tools.update(this.sim, alpha, dt, x, z);
     this.pickups.update(this.sim, alpha, this.rig.footprint);

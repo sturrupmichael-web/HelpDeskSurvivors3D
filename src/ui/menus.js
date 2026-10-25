@@ -147,7 +147,7 @@ export class Menus {
             <div><kbd>WASD</kbd>/<kbd>Arrows</kbd> move · your tools fire automatically</div>
             <div><kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>C</kbd> characters</div>
           </div>
-          <p class="version">Version ${VERSION}</p>
+          <p class="version">Version ${VERSION} · <a href="https://game.michaelsturrup.com/" target="_blank" rel="noopener">Play the original 2D game</a></p>
         </div>
       </div>`,
       (code) => {

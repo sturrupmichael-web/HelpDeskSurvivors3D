@@ -101,6 +101,19 @@ export const merge = (parts) => {
   return g;
 };
 
+// Far-away users can be built with fewer segments (lowDetail below): `seg(n, min)` is the
+// segment count to use, n normally, about half of it (at least `min`) in low detail.
+let low = false;
+const seg = (n, min) => (low ? Math.max(min, Math.round(n * 0.55)) : n);
+export function lowDetail(build) {
+  low = true;
+  try {
+    return build();
+  } finally {
+    low = false;
+  }
+}
+
 // Soft shapes for people: rounded and low-poly, so the cast reads as cartoon office
 // workers rather than voxels. `sx, sy, sz` squash a shape before it's placed.
 const shaped = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
@@ -108,17 +121,17 @@ const shaped = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz 
   return paint(geo, color, x, y, z, rx, ry, rz);
 };
 const sphere = (r, color, x, y, z, sx = 1, sy = 1, sz = 1, w = 7, h = 5) =>
-  shaped(new THREE.SphereGeometry(r, w, h), color, x, y, z, 0, 0, 0, sx, sy, sz);
+  shaped(new THREE.SphereGeometry(r, seg(w, 4), seg(h, 3)), color, x, y, z, 0, 0, 0, sx, sy, sz);
 // A capsule centered on (x, y, z), tilted by rz (sideways) and rx (forward).
 const capsule = (r, len, color, x, y, z, rx = 0, rz = 0) =>
-  shaped(new THREE.CapsuleGeometry(r, len, 1, 6), color, x, y, z, rx, 0, rz);
+  shaped(new THREE.CapsuleGeometry(r, len, 1, seg(6, 4)), color, x, y, z, rx, 0, rz);
 // A turned shape from a [radius, height] profile (bodies, skirts).
 const lathe = (profile, color, segments = 10) =>
-  paint(new THREE.LatheGeometry(profile.map(([r, h]) => new THREE.Vector2(r, h)), segments), color);
+  paint(new THREE.LatheGeometry(profile.map(([r, h]) => new THREE.Vector2(r, h)), seg(segments, 5)), color);
 // Hair: a cap over the head, tilted back so it covers more at the back than the front.
 // `reach` is how far down it comes (radians from the crown).
 const hairCap = (r, color, y, reach, tilt = -0.45, sx = 1.04) =>
-  shaped(new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, reach), color, 0, y, -0.01, tilt, 0, 0, sx, 1, 1);
+  shaped(new THREE.SphereGeometry(r, seg(10, 5), seg(6, 3), 0, Math.PI * 2, 0, reach), color, 0, y, -0.01, tilt, 0, 0, sx, 1, 1);
 
 // Everyone shares a body plan (feet at y = 0, facing +z): a big round head, a bean of
 // a torso, short limbs. Heights in scene units.

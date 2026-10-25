@@ -24,20 +24,22 @@ function serve() {
 }
 
 // Opens `page` (e.g. dev.html) and passes a Playwright page to `fn`. Console errors and
-// page errors are collected on page.errors.
+// page errors are collected on page.errors. `//host/page` opens it at that host name instead
+// of localhost (still this server), to see the page as the live site would.
 export async function withPage(file, fn, viewport = { width: 1280, height: 720 }) {
   const { chromium } = await import('playwright');
   const server = await serve();
+  const [, host = 'localhost', path = file] = file.match(/^\/\/([^/]+)\/(.*)$/) ?? [];
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
-    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--host-resolver-rules=MAP ${host} 127.0.0.1`],
   });
   try {
     const page = await browser.newPage({ viewport });
     page.errors = [];
     page.on('console', (m) => m.type() === 'error' && page.errors.push(m.text()));
     page.on('pageerror', (e) => page.errors.push(e.message));
-    await page.goto(`http://localhost:${server.address().port}/${file}`);
+    await page.goto(`http://${host}:${server.address().port}/${path}`);
     await page.waitForFunction(() => window.sim && !document.getElementById('boot'), null, { timeout: 15000 });
     await fn(page);
   } finally {

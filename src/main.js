@@ -19,6 +19,7 @@ import { Floaters } from './ui/floaters.js';
 import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusic, stopMusic, duckMusic, setMusicStyle } from './engine/audio.js';
 import { setHaptics } from './engine/haptics.js';
 import { VERSION } from './version.js';
+import { PLAYTEST } from './playtest.js';
 import { MAPS, MAP_ORDER } from '../data/maps.js';
 import { account } from './net/account.js';
 import { CloudSave } from './net/cloudsave.js';
@@ -67,7 +68,7 @@ setMusicStyle(sim.map.music);
 view = new View(canvas, sim, { antialias: !isTouchDevice() });
 const fps = new FpsCounter(ui);
 const stick = new TouchStick(ui);
-const panel = new SettingsPanel(ui, settings, apply, playtest);
+const panel = new SettingsPanel(ui, settings, apply, PLAYTEST ? playtest : null);
 const levelUp = new LevelUpScreen(
   ui,
   (card, always) => sim.choose(card, always),
@@ -160,6 +161,7 @@ function apply(s) {
 apply(settings);
 
 // Playtest helpers, like the original's debug hotkeys (also buttons in Settings for phones).
+// Only where PLAYTEST allows them (src/playtest.js): not on the live site.
 function playtest(act) {
   const p = sim.player;
   // Shifts that used a helper stay off the leaderboard. Restart starts a clean one.
@@ -237,11 +239,11 @@ onKeyPress((code) => {
   if (gameOver.key(code) || menus.key(code) || levelUp.key(code) || pause.key(code)) return;
   if (code === 'KeyM') mute();
   else if (code === 'KeyO') panel.toggle(true);
-  else if (code === 'KeyG') playtest('pay'); // works on the menus too, to try the shop and techs
-  else if (code === 'KeyL') playtest('map'); // ...and so does this, to try the maps
+  else if (PLAYTEST && code === 'KeyG') playtest('pay'); // works on the menus too, to try the shop and techs
+  else if (PLAYTEST && code === 'KeyL') playtest('map'); // ...and so does this, to try the maps
   else if (sim.over || sim.waiting || sim.menu) return;
   else if (code === 'Escape' || code === 'KeyP' || code === 'PadStart') sim.pause();
-  else if (PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);
+  else if (PLAYTEST && PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);
 });
 
 let hudHidden = false;
@@ -289,4 +291,6 @@ console.info('Helpdesk Survivors 3D version', VERSION);
 if (signIn === 'linked' || signIn === 'signed-in') hud.toast({ icon: 'key', label: 'SIGNED IN WITH GOOGLE', name: account.user.email || 'Your progress now follows you' });
 else if (signIn === 'error') hud.toast({ icon: 'key', label: "GOOGLE SIGN-IN DIDN'T FINISH", name: 'See the Account screen (U)' });
 cloud.sync();
+// Offline play for the installed game (sw.js). Not from dev.html, which loads src/ directly.
+if ('serviceWorker' in navigator && !location.pathname.endsWith('dev.html')) navigator.serviceWorker.register('sw.js').catch(() => {});
 document.getElementById('boot')?.remove();

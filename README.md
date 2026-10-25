@@ -1,5 +1,9 @@
 # Helpdesk Survivors 3D
 
+Play it at <https://michaelsturrup.com/HelpDeskSurvivors3D/>, where it's one of the games on
+michaelsturrup.com. The original 2D game stays at
+<https://game.michaelsturrup.com/>.
+
 A 2.5D rebuild of [Helpdesk Survivors](https://github.com/sturrupmichael-web/HelpDeskSurvivor)
 in Three.js: the same survivors-like about working the IT helpdesk, drawn in 3D with a tilted
 follow camera and low-poly models built from code. The game logic is ported from the original;
@@ -40,7 +44,8 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | R (level-up cards) | Reroll the cards (needs the shop's Escalation Path) |
 | M | Mute / unmute (sound starts after your first key press or tap) |
 | F | FPS counter on/off |
-| O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, sound and music volume, screen shake, damage numbers, vibration, camera tilt and distance, playtest helpers |
+| O (or the gear button) | Settings: shadows, outlines, simpler far-away users, resolution, FPS counter, sound and music volume, screen shake, damage numbers, vibration, camera tilt and distance, and the playtest helpers where they're on |
+| | **Playtest helpers** (below): only on a local server, with `?debug` in the address, or in a `PLAYTEST=1` build (the playtest copy). Off on the live site |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
 | 3 | Playtest: add the next tool |
 | T | Playtest: swap your newest tool for the next one in the toolbox (to try every tool in turn) |
@@ -95,6 +100,9 @@ Rules that keep this working:
 - Simulation units are the original's world pixels on a flat plane (x right, y down the screen),
   so numbers in `data/` port unchanged. The renderer maps (x, y) to Three.js (X, Z) at
   1 unit = 16 px, and draws everything at its feet (`y + foot`), where collision happens.
+- On phones (Settings: Simpler far-away users), users well beyond the tech are drawn from a
+  low-detail copy of their model (`lowDetail` in models.js, about half the triangles) with no
+  outline.
 - Every model comes from `src/render/models.js` as vertex-colored geometry: people are
   toon-shaded, everything else flat-shaded, and people and furniture get ink outlines
   (an inverted hull, toggled in Settings). To use real art later, swap an entry there for a
@@ -125,4 +133,13 @@ game's requests with a pretend Supabase (`tests/fakeSupabase.mjs`); nothing reac
 ## Deploy
 
 Pushes to `main` run Tests; when they pass, Deploy builds `index.html` and publishes it to
-GitHub Pages (Settings > Pages > Source: GitHub Actions).
+GitHub Pages (Settings > Pages > Source: GitHub Actions). There's no custom domain or CNAME
+here on purpose: the account's user site (sturrupmichael-web.github.io) uses
+michaelsturrup.com, so GitHub serves this repo at `michaelsturrup.com/HelpDeskSurvivors3D/`
+(the repo's name is the folder). `site.mjs`
+lists what's served: the page, `sw.js` (offline play once installed), `manifest.webmanifest`
+and `icons/` (home-screen icons and the link preview, made from the game by
+`node icons/make.mjs`).
+
+`PLAYTEST=1 npm run build` makes a copy with the playtest helpers on wherever it runs, for
+the private playtest page.
