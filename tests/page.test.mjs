@@ -14,9 +14,10 @@ export const tests = [
     assert(info.calls > 3 && info.triangles > 1000, `only ${info.calls} draw calls, ${info.triangles} triangles`);
   }],
   ['the tech walks with WASD', async (page) => {
-    const x0 = await page.evaluate(() => sim.player.x);
+    // Wait on game time, not wall time: a slow software renderer runs the game slower.
+    const [x0, t0] = await page.evaluate(() => [sim.player.x, sim.time]);
     await page.keyboard.down('KeyD');
-    await page.waitForTimeout(600);
+    await page.waitForFunction((t) => sim.time > t + 0.5, t0);
     await page.keyboard.up('KeyD');
     const x1 = await page.evaluate(() => sim.player.x);
     assert(x1 - x0 > 20, `moved only ${x1 - x0} px`);
