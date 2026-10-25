@@ -763,13 +763,18 @@ tests.push(
     const sim = new Sim({ coach: (c) => cards.push(c) });
     sim.startTutorial();
     assert(sim.spawner.stopped && sim.policy.ids.length === 0 && sim.mapId === 'office', 'not a plain Office shift');
+    sim.floor.solid = false; // walking straight at the pizza could get stuck on a cubicle row
     let a = 0;
     for (let i = 0; i < 60 * 240 && !sim.over; i++) {
       if (sim.choices) sim.choose(sim.choices[0]);
+      if (sim.chest) sim.closeChest(); // a user can drop one
       a += 0.01;
-      // Walk in a circle (it finds the pizza by passing near it), and stand on the pizza.
+      // Walk in a circle to learn moving, walk to any pizza, and otherwise stand still and
+      // let the users come to the tools.
       const pz = sim.items.items.slice(0, sim.items.count).find((it) => it.id === 'pizza');
-      const ax = pz ? { x: Math.sign(pz.x - sim.player.x), y: Math.sign(pz.y - sim.player.y) } : { x: Math.cos(a), y: Math.sin(a) };
+      const ax = pz
+        ? { x: Math.sign(pz.x - sim.player.x), y: Math.sign(pz.y - sim.player.y) }
+        : sim.tutorial.current?.id === 'move' ? { x: Math.cos(a), y: Math.sin(a) } : still;
       sim.tick(STEP, ax);
       assert(sim.player.hp > 0, 'burned out in training');
     }
