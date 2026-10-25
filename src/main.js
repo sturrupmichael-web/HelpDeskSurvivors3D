@@ -8,8 +8,10 @@ import { loadSettings, saveSettings, isTouchDevice } from './ui/settings.js';
 import { FpsCounter } from './ui/fps.js';
 import { TouchStick } from './ui/touchStick.js';
 import { SettingsPanel } from './ui/settingsPanel.js';
-import { Banner } from './ui/banner.js';
+import { Hud } from './ui/hud.js';
 import { LevelUpScreen } from './ui/levelUp.js';
+import { PauseScreen } from './ui/pause.js';
+import { GameOverScreen } from './ui/gameOver.js';
 import { VERSION } from './version.js';
 
 const canvas = document.getElementById('game');
@@ -17,10 +19,11 @@ const ui = document.getElementById('ui');
 initInput(canvas);
 
 const settings = loadSettings();
-const banner = new Banner(ui);
 let view = null;
+const hud = new Hud(ui, () => sim.pause());
+const banner = { show: (title, text, seconds) => hud.banner(title, text, seconds) };
 const sim = new Sim({
-  banner: (title, text, seconds) => banner.show(title, text, seconds),
+  banner: banner.show,
   shake: (amount) => view?.rig.shake(amount),
   ring: (x, y, r, color, life, fill) => view?.weapons.ring(x, y, r, color, life, fill),
 });
@@ -34,6 +37,19 @@ const levelUp = new LevelUpScreen(
   (card, always) => sim.choose(card, always),
   () => sim.closeChest(),
 );
+const pause = new PauseScreen(ui, {
+  onResume: () => sim.resume(),
+  onRestart: () => newShift(),
+  onSettings: () => panel.toggle(true),
+});
+const gameOver = new GameOverScreen(ui, () => newShift());
+// The gear and Settings panel go on top of the screens.
+ui.append(panel.button, panel.panel);
+
+function newShift() {
+  sim.newRun();
+  view.resetCamera();
+}
 
 function apply(s) {
   view.applyQuality(s);
@@ -67,21 +83,33 @@ function playtest(act) {
     p.god = !p.god;
     banner.show(p.god ? 'GOD MODE ON' : 'GOD MODE OFF', p.god ? 'Users can no longer hurt you.' : 'Careful now.', 1.5);
   } else if (act === 'clear') sim.debugClear();
-  else if (act === 'restart') sim.newRun();
+  else if (act === 'restart') newShift();
 }
 const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyR: 'restart' };
 
+// Keys go to the topmost thing on screen: Settings, then the summary, the cards, the pause
+// menu, and last the floor. F (FPS counter) works everywhere.
 onKeyPress((code) => {
-  // The cards take the keys while they're up, except the FPS counter and Settings.
-  if (code !== 'KeyF' && code !== 'KeyO' && !panel.open && levelUp.key(code)) return;
-  if (PLAYTEST_KEYS[code] && !panel.open) playtest(PLAYTEST_KEYS[code]);
-  else if (code === 'KeyF') {
+  if (code === 'KeyF') {
     settings.fps = !settings.fps;
     saveSettings(settings);
     apply(settings);
     if (panel.open) panel.draw();
-  } else if (code === 'KeyO' || (code === 'Escape' && panel.open)) panel.toggle();
+    return;
+  }
+  if (panel.open) {
+    if (code === 'KeyO' || code === 'Escape' || code === 'PadB') panel.toggle(false);
+    return;
+  }
+  if (gameOver.key(code) || levelUp.key(code) || pause.key(code)) return;
+  if (code === 'KeyO') panel.toggle(true);
+  else if (sim.over || sim.waiting) return;
+  else if (code === 'Escape' || code === 'KeyP' || code === 'PadStart') sim.pause();
+  else if (PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);
 });
+
+// Hiding the tab (or the phone's screen going off) puts the shift on hold.
+document.addEventListener('visibilitychange', () => document.hidden && sim.pause());
 
 const axis = { x: 0, y: 0 };
 const none = { x: 0, y: 0 };
@@ -91,8 +119,10 @@ startLoop(
     pollGamepad(dt);
     view.render(dt, alpha);
     stick.update();
-    banner.update(dt, sim);
+    hud.update(dt, sim, view);
     levelUp.update(sim);
+    pause.update(sim);
+    gameOver.update(sim);
     fps.frame(dt, view.renderer.info);
   },
 );

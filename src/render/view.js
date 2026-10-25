@@ -23,6 +23,8 @@ export const RESOLUTIONS = {
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
+const SCREEN_POINT = new THREE.Vector3();
+
 export class View {
   // `antialias` can only be chosen when the renderer is created (main.js decides).
   constructor(canvas, sim, { antialias = true } = {}) {
@@ -111,6 +113,15 @@ export class View {
   resetCamera() {
     const p = this.sim.player;
     this.rig.snap(px(p.x), px(p.y + FOOT));
+  }
+
+  // Where a floor point (world px, at knee height) is on the page, in CSS px. Sets
+  // out.x and out.y; returns false if it's behind the camera.
+  toScreen(wx, wy, out) {
+    const v = SCREEN_POINT.set(px(wx), 0.4, px(wy + FOOT)).project(this.rig.camera);
+    out.x = ((v.x + 1) / 2) * this.size.w;
+    out.y = ((1 - v.y) / 2) * this.size.h;
+    return v.z < 1;
   }
 
   resize() {

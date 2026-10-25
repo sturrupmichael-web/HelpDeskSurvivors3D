@@ -28,6 +28,8 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | --- | --- |
 | WASD / Arrow keys / left stick | Move |
 | Touch | Put a finger down anywhere and drag (floating joystick) |
+| Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts from the pause menu (press twice) |
+| Enter / Space | Next Shift on the end-of-shift summary |
 | F | FPS counter on/off |
 | O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, screen shake, camera tilt and distance, playtest helpers |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
@@ -49,11 +51,11 @@ data/          balance and content, copied from the original (world pixels, as t
 src/engine/    fixed-timestep loop, input, object pool, spatial hash (ported)
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
                projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
-               (upgrades.js), spawner and wave timeline, floor layout and collision. No Three.js, no DOM
+               (upgrades.js), CSAT score (score.js), spawner and wave timeline, floor layout and collision. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
                tool effects, pickups, models.js (every shape lives here)
-src/ui/        HTML/CSS overlays: settings, FPS counter, touch stick, event banner, clock and XP bar,
-               level-up cards and chests (icons.js is the original's pixel icons)
+src/ui/        HTML/CSS overlays: HUD (hud.js), level-up cards and chests, pause menu, end-of-shift
+               summary, settings, FPS counter, touch stick (icons.js is the original's pixel icons)
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```
 

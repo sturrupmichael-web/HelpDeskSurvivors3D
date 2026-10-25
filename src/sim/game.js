@@ -10,7 +10,8 @@
 //
 // Level-ups and Change Approved chests stop the floor until the player answers: the
 // simulation sets `choices` (the cards) or `chest` (what a chest gave), skips ticks while
-// either is set, and the page calls `choose(card)` or `closeChest()`. The one thing the
+// either is set, and the page calls `choose(card)` or `closeChest()`. Pausing works the
+// same way (`paused`), and a burnout sets `over` to the run's stats until `newRun()`. The one thing the
 // page tells the simulation is what part of the floor is on screen (`view`), which the
 // spawner needs, as the original's spawner needed the canvas size.
 
@@ -30,10 +31,11 @@ import { TICKETS, MAX_ITEMS } from '../../data/pickups.js';
 import { EVOLUTIONS } from '../../data/evolutions.js';
 import { makeTicket, makeItem, updateTickets, updateItems, dropItem } from './pickups.js';
 import { rollChoices, applyChoice, openChest } from './upgrades.js';
+import { PASSIVES } from '../../data/passives.js';
+import { Score } from './score.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
-const BURNOUT_PAUSE = 2.5; // seconds on the burnout banner before the shift restarts (until milestone 5)
 
 export class Sim {
   // Hooks: sfx(name, x), banner(title, text, seconds), shake(amount),
@@ -59,6 +61,7 @@ export class Sim {
     this.projectiles = createProjectilePool();
     this.tickets = new Pool(TICKETS.maxOnFloor, makeTicket);
     this.items = new Pool(MAX_ITEMS, makeItem);
+    this.score = new Score();
     // The visible floor around the camera's ground point, in world px: the four screen
     // corners (x, y pairs, clockwise from bottom left), the extents, and the farthest corner.
     this.view = { corners: new Float64Array(8), left: 0, right: 0, top: 0, bottom: 0, radius: 0 };
@@ -92,8 +95,9 @@ export class Sim {
     this.player.weapons.push(createWeapon(def.starter, 0));
     this.time = 0;
     this.ticks = 0;
-    this.kills = 0;
-    this.burnoutT = 0;
+    this.score.reset();
+    this.paused = false;
+    this.over = null; // the run's stats once the tech burns out
     this.choices = null; // level-up cards waiting for a pick
     this.chest = null; // what the last Change Approved chest gave, until it's dismissed
     this.autoPizza = false; // everything maxed: take the pizza without asking
@@ -114,33 +118,32 @@ export class Sim {
     return false;
   }
 
+  get kills() {
+    return this.score.kills;
+  }
+
   // True while a level-up or chest screen is up; the floor doesn't move.
   get waiting() {
     return !!(this.choices || this.chest);
   }
 
+  // True whenever ticks are skipped: a screen is up, the game is paused or the run is over.
+  get frozen() {
+    return this.waiting || this.paused || !!this.over;
+  }
+
+  // Ignored while a screen is already up (the floor is stopped anyway).
+  pause() {
+    if (!this.over && !this.waiting) this.paused = true;
+  }
+
+  resume() {
+    this.paused = false;
+  }
+
   tick(dt, axis) {
     const p = this.player;
-    if (this.waiting) return;
-    if (this.burnoutT > 0) {
-      // Burned out: the floor freezes for a moment, then a new shift starts.
-      p.px = p.x;
-      p.py = p.y;
-      for (let i = 0; i < this.enemies.count; i++) {
-        const e = this.enemies.items[i];
-        e.px = e.x;
-        e.py = e.y;
-      }
-      for (const pool of [this.projectiles, this.tickets, this.items]) {
-        for (let i = 0; i < pool.count; i++) {
-          const o = pool.items[i];
-          o.px = o.x;
-          o.py = o.y;
-        }
-      }
-      if ((this.burnoutT -= dt) <= 0) this.newRun();
-      return;
-    }
+    if (this.frozen) return this.hold();
     this.time += dt;
     this.ticks++;
     updatePlayer(this, axis, dt);
@@ -156,12 +159,54 @@ export class Sim {
     const comeback = p.hp <= 0 && COMEBACKS.find((c) => p[c.counter] > 0);
     if (comeback) this.revive(comeback);
     else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest) this.openLevelUp();
-    if (p.hp <= 0) {
-      p.hp = 0;
-      this.burnoutT = BURNOUT_PAUSE;
-      this.banner('BURNED OUT', `You lasted ${fmtTime(this.time)}. A fresh shift starts in a moment.`, BURNOUT_PAUSE);
-      this.sfx('burnout');
+    this.score.update(dt);
+    if (p.hp <= 0) this.endRun(false);
+  }
+
+  // While frozen, everything's previous position is its position, so the renderer's
+  // interpolation holds still instead of swinging between the last two ticks.
+  hold() {
+    const p = this.player;
+    p.px = p.x;
+    p.py = p.y;
+    for (const pool of [this.enemies, this.projectiles, this.tickets, this.items]) {
+      for (let i = 0; i < pool.count; i++) {
+        const o = pool.items[i];
+        o.px = o.x;
+        o.py = o.y;
+      }
     }
+  }
+
+  // The shift is over: `over` holds what the summary screen shows. Winning needs the
+  // final boss, which comes later.
+  endRun(won) {
+    const p = this.player;
+    p.hp = Math.max(0, p.hp);
+    this.choices = null;
+    this.chest = null;
+    this.paused = false;
+    this.sfx(won ? 'victory' : 'burnout');
+    this.over = {
+      won,
+      character: p.def.name,
+      mapName: this.map.name,
+      time: this.time,
+      kills: this.score.kills,
+      csat: this.score.csat,
+      bestStreak: this.score.bestStreak,
+      level: p.level,
+      tools: p.weapons
+        .map((w) => ({
+          name: w.def.name, icon: w.def.icon, desc: w.def.desc, evolved: !!w.def.evolved, damage: Math.round(w.damageDone),
+          level: w.level, maxLevel: w.def.levels.length,
+        }))
+        .sort((a, b) => b.damage - a.damage),
+      passives: Object.entries(p.passives).map(([id, level]) => {
+        const d = PASSIVES[id];
+        return { name: d.name, icon: d.icon, desc: d.desc, level, maxLevel: d.maxLevel };
+      }),
+    };
   }
 
   // --- Level-ups, chests, comebacks ---------------------------------------------------
@@ -270,8 +315,3 @@ export class Sim {
     for (const w of this.player.weapons) if (w.level < w.def.levels.length) setWeaponLevel(w, w.level + 1);
   }
 }
-
-export const fmtTime = (t) => {
-  const s = Math.floor(t);
-  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-};

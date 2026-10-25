@@ -24,9 +24,13 @@ export const tests = [
   }],
   ['F toggles the FPS counter', async (page) => {
     await page.keyboard.press('KeyF');
-    await page.waitForTimeout(700);
+    // The counter fills in after half a second of game frames, which a slow software
+    // renderer can stretch well past half a second of wall time: wait for the text.
+    const shown = await page
+      .waitForFunction(() => /\d+ FPS/.test(document.querySelector('.fps:not([hidden])')?.textContent ?? ''), null, { timeout: 10000 })
+      .then(() => true, () => false);
     const text = await page.evaluate(() => document.querySelector('.fps:not([hidden])')?.textContent ?? '');
-    assert(/FPS/.test(text), `counter shows "${text}"`);
+    assert(shown, `counter shows "${text}"`);
     await page.keyboard.press('KeyF');
   }],
   ['users are drawn instanced', async (page) => {
@@ -70,6 +74,35 @@ export const tests = [
     await page.waitForFunction(() => !sim.choices);
     await page.waitForFunction(() => document.querySelector('.screen').hidden);
     assert(level === 2, `level ${level}`);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['Esc puts the shift on hold and resumes it', async (page) => {
+    await page.evaluate(() => {
+      while (sim.choices) sim.choose(sim.choices[0]);
+      sim.chest = null;
+    });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-panel', { timeout: 5000 });
+    const t = await page.evaluate(() => sim.time);
+    await page.waitForTimeout(300);
+    assert((await page.evaluate(() => sim.time)) === t, 'the clock ran while paused');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !sim.paused && document.querySelector('.pause-panel').closest('.screen').hidden);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['burnout shows the summary and Next Shift starts over', async (page) => {
+    await page.evaluate(() => {
+      while (sim.choices) sim.choose(sim.choices[0]);
+      sim.chest = null;
+      sim.player.god = false;
+      sim.player.hp = -1;
+    });
+    await page.waitForSelector('.summary', { timeout: 5000 });
+    const title = await page.textContent('.summary h1');
+    assert(title === 'BURNOUT', `title ${title}`);
+    await page.waitForTimeout(700); // a held key can't skip the summary
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.over && sim.time < 2);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
   ['quality settings apply', async (page) => {

@@ -2,7 +2,7 @@
 
 import { Sim } from '../src/sim/game.js';
 import { CHARACTERS } from '../data/player.js';
-import { FOOT } from '../src/sim/player.js';
+import { FOOT, hurtPlayer } from '../src/sim/player.js';
 import { assert } from './harness.mjs';
 import { WEAPONS } from '../data/weapons.js';
 import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
@@ -89,14 +89,37 @@ tests.push(
       if (down) assert(r > 250 && r < 400, `spawn ${r.toFixed(0)} px away toward the near edge`);
     }
   }],
-  ['users touching the tech drain sanity, and burnout restarts the shift', () => {
+  ['users touching the tech drain sanity, and burnout ends the shift with its stats', () => {
     const sim = new Sim();
-    const banners = [];
-    sim.banner = (t) => banners.push(t);
     sim.player.weapons.length = 0; // unarmed, so the users get through
     run(sim, 60, { x: 0, y: 0 });
-    assert(banners.includes('BURNED OUT'), 'never burned out standing still for a minute');
-    assert(sim.time < 60, 'the shift did not restart');
+    assert(sim.over && !sim.over.won, 'never burned out standing still for a minute');
+    const t = sim.time;
+    run(sim, 1, { x: 1, y: 0 });
+    assert(sim.time === t && sim.player.x === sim.player.px, 'the floor kept moving after burnout');
+    assert(sim.over.time === t && sim.over.level >= 1 && Array.isArray(sim.over.tools), 'stats are missing');
+    sim.newRun();
+    assert(!sim.over && sim.time === 0 && sim.player.hp === sim.player.maxHp, 'restart did not reset');
+  }],
+  ['pausing freezes the floor and resuming carries on', () => {
+    const sim = arena(null, 20);
+    run(sim, 0.5, still);
+    sim.pause();
+    const t = sim.time;
+    const x = sim.player.x;
+    run(sim, 2, { x: 1, y: 0 });
+    assert(sim.time === t && sim.player.x === x, 'moved while paused');
+    sim.resume();
+    run(sim, 0.5, { x: 1, y: 0 });
+    assert(sim.time > t && sim.player.x > x, 'did not resume');
+  }],
+  ['closing users builds a CSAT streak, and getting hurt breaks it', () => {
+    const sim = arena(null, 0);
+    for (let i = 0; i < 30; i++) sim.score.onKill();
+    assert(sim.score.mult === 2 && sim.score.csat > 30 && sim.kills === 30, `x${sim.score.mult}, ${sim.score.csat} CSAT`);
+    sim.player.god = false;
+    hurtPlayer(sim, 1);
+    assert(sim.score.streak === 0 && sim.score.mult === 1 && sim.score.bestStreak === 30, 'streak survived a hit');
   }],
   ['users go round cubicle rows instead of through them', () => {
     const sim = new Sim();
@@ -262,9 +285,9 @@ tests.push(
     sim.player.warranty = 1;
     sim.player.hp = 0;
     run(sim, STEP, still);
-    assert(sim.player.hp > 0 && sim.player.warranty === 0 && sim.burnoutT === 0, 'no comeback');
+    assert(sim.player.hp > 0 && sim.player.warranty === 0 && !sim.over, 'no comeback');
     sim.player.hp = 0;
     run(sim, STEP, still);
-    assert(sim.burnoutT > 0, 'came back twice');
+    assert(sim.over, 'came back twice');
   }],
 );
