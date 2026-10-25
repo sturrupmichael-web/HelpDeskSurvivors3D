@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { CameraRig } from './cameraRig.js';
 import { FloorView } from './floor.js';
-import { createTechModel, blobShadowGeometry, px } from './models.js';
+import { createTechModel, blobShadowGeometry, outlineMaterial, px } from './models.js';
 import { EnemyView } from './enemies.js';
 import { WeaponView } from './weapons.js';
 import { FOOT } from '../sim/player.js';
@@ -81,8 +81,9 @@ export class View {
     this.resetCamera();
   }
 
-  // { shadows: bool, resolution: 'low' | 'medium' | 'high' }
-  applyQuality({ shadows, resolution }) {
+  // { shadows: bool, outlines: bool, resolution: 'low' | 'medium' | 'high' }
+  applyQuality({ shadows, outlines = true, resolution }) {
+    outlineMaterial.visible = outlines; // outlines redraw every person, so they're optional
     const r = this.renderer;
     r.setPixelRatio((RESOLUTIONS[resolution] ?? RESOLUTIONS.high)());
     r.shadowMap.enabled = shadows;

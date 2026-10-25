@@ -42,6 +42,7 @@ export class SettingsPanel {
       <h2>Settings</h2>
       <h3>Quality</h3>
       ${toggle('shadows', 'Shadows')}
+      ${toggle('outlines', 'Outlines')}
       <div class="row"><span>Resolution</span><span class="choices">${Object.entries(RES_LABELS)
         .map(([k, l]) => `<button class="choice${s.resolution === k ? ' on' : ''}" data-res="${k}">${l}</button>`)
         .join('')}</span></div>

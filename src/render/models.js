@@ -17,6 +17,32 @@ export const px = (v) => v / UNIT;
 // One material for every vertex-colored model, so meshes batch well.
 export const flatMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
+// People are toon-shaded: light falls off in two hard steps instead of a smooth ramp.
+const toonSteps = new THREE.DataTexture(new Uint8Array([150, 255]), 2, 1, THREE.RedFormat);
+toonSteps.minFilter = toonSteps.magFilter = THREE.NearestFilter;
+toonSteps.needsUpdate = true;
+export const toonMaterial = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonSteps });
+
+// ...and outlined, like the original sprites: an "inverted hull", the same geometry drawn
+// again in dark ink with its back faces only, pushed out along the normals. Works with
+// instancing too (the instance matrix is applied after the push).
+export const OUTLINE = 0.028; // outline thickness, scene units
+export const outlineMaterial = new THREE.MeshBasicMaterial({ color: P.k, side: THREE.BackSide });
+outlineMaterial.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+    transformed += normal * ${OUTLINE.toFixed(3)};`,
+  );
+};
+
+// A mesh's outline: a child that shares its geometry.
+export function outlined(mesh) {
+  const ink = new THREE.Mesh(mesh.geometry, outlineMaterial);
+  mesh.add(ink);
+  return mesh;
+}
+
 const tmpColor = new THREE.Color();
 const tmpMatrix = new THREE.Matrix4();
 const tmpEuler = new THREE.Euler();
@@ -91,8 +117,8 @@ function head(parts, skin, hair, hairStyle) {
   parts.push(
     sphere(0.1, skin, 0, 1.0, 0, 1, 1, 1, 6, 3), // neck
     sphere(HEAD_R, skin, 0, HEAD_Y, 0, 1, 0.95, 0.95, 10, 7),
-    sphere(0.045, P.k, -0.11, HEAD_Y + 0.02, HEAD_R * 0.93, 0.8, 1.3, 0.5, 5, 3), // eyes
-    sphere(0.045, P.k, 0.11, HEAD_Y + 0.02, HEAD_R * 0.93, 0.8, 1.3, 0.5, 5, 3),
+    sphere(0.03, P.k, -0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3), // eyes (small: the outline fattens them)
+    sphere(0.03, P.k, 0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3),
   );
   if (hairStyle === 'bob') parts.push(hairCap(HEAD_R + 0.03, hair, HEAD_Y + 0.02, 1.95, -0.5, 1.1));
   else parts.push(hairCap(HEAD_R + 0.025, hair, HEAD_Y + 0.02, 1.45, -0.45));
@@ -107,9 +133,9 @@ export function createTechModel() {
   const body = new THREE.Group(); // bobs while walking
   root.add(body);
   const mesh = (geo) => {
-    const m = new THREE.Mesh(geo, flatMaterial);
+    const m = new THREE.Mesh(geo, toonMaterial);
     m.castShadow = true;
-    return m;
+    return outlined(m);
   };
 
   // Legs hang from the hip, so they can swing: trouser leg and a round shoe.
