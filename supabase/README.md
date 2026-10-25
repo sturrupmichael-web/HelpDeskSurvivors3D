@@ -15,8 +15,7 @@ again.
 
 1. **SQL Editor:** run `001_3d.sql`.
 2. **Authentication, URL Configuration, Redirect URLs:** add
-   `https://3d.michaelsturrup.com/**` (and, for the old address while it still redirects,
-   `https://sturrupmichael-web.github.io/HelpDeskSurvivors3D/**`). Without it, Supabase
+   `https://michaelsturrup.com/HelpDeskSurvivors3D/**`, where the game lives. Without it, Supabase
    sends players who sign in with Google back to the Site URL, which is the 2D game.
 3. Nothing else: guest sign-ins, manual linking and the Google provider are already on for
    the 2D game, and the 3D game uses them as they are. Google's own console needs no

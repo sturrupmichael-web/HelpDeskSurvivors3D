@@ -1,6 +1,7 @@
 # Helpdesk Survivors 3D
 
-Play it at <https://3d.michaelsturrup.com/>. The original 2D game stays at
+Play it at <https://michaelsturrup.com/HelpDeskSurvivors3D/>, where it's one of the games on
+michaelsturrup.com. The original 2D game stays at
 <https://game.michaelsturrup.com/>.
 
 A 2.5D rebuild of [Helpdesk Survivors](https://github.com/sturrupmichael-web/HelpDeskSurvivor)
@@ -132,8 +133,10 @@ game's requests with a pretend Supabase (`tests/fakeSupabase.mjs`); nothing reac
 ## Deploy
 
 Pushes to `main` run Tests; when they pass, Deploy builds `index.html` and publishes it to
-GitHub Pages (Settings > Pages > Source: GitHub Actions), at the custom domain
-`3d.michaelsturrup.com` (Settings > Pages > Custom domain; `CNAME` says the same). `site.mjs`
+GitHub Pages (Settings > Pages > Source: GitHub Actions). There's no custom domain or CNAME
+here on purpose: the account's user site (sturrupmichael-web.github.io) uses
+michaelsturrup.com, so GitHub serves this repo at `michaelsturrup.com/HelpDeskSurvivors3D/`
+(the repo's name is the folder). `site.mjs`
 lists what's served: the page, `sw.js` (offline play once installed), `manifest.webmanifest`
 and `icons/` (home-screen icons and the link preview, made from the game by
 `node icons/make.mjs`).
