@@ -164,6 +164,7 @@ export class Spawner {
 
   // Bosses always spawn at full base HP and speed (no timeline scaling).
   bossEvent(game, ev) {
+    game.timeline.mark(game, 'boss', ENEMIES[ev.boss]?.name ?? ev.title);
     const pool = game.enemies;
     if (pool.count >= pool.capacity) {
       // Make room: a boss must never fail to show up because the floor is full.

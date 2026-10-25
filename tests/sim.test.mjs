@@ -8,6 +8,7 @@ import { WEAPONS } from '../data/weapons.js';
 import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
 import { spawnEnemy, damageEnemy } from '../src/sim/enemies.js';
 import { ENEMIES } from '../data/enemies.js';
+import { Meta, memoryStore, upgradeSave } from '../src/sim/meta.js';
 
 const STEP = 1 / 60;
 const run = (sim, seconds, axis) => {
@@ -458,5 +459,80 @@ tests.push(
     assert(!sim.over, 'the summary came up straight away');
     run(sim, 4, still);
     assert(sim.over?.won === true, 'not won');
+  }],
+);
+
+// Progression: the save, Overtime Pay, the shop, techs and their perks.
+tests.push(
+  ['a shift pays Overtime Pay into the save, with records', () => {
+    const store = memoryStore();
+    const sim = new Sim({}, new Meta(store));
+    sim.floor.solid = false;
+    sim.player.god = true;
+    sim.player.xpNeed = Infinity; // no level-up cards to stop the clock
+    run(sim, 125, { x: 0, y: 0 });
+    sim.player.god = false;
+    sim.player.hp = -1;
+    sim.tick(STEP, { x: 0, y: 0 });
+    const o = sim.over;
+    assert(o && !o.won, 'no burnout');
+    assert(o.pay >= 24 && o.balance === o.pay, `paid ${o.pay}, balance ${o.balance}`); // 12 per minute and more
+    assert(o.records.includes('time'), 'no time record');
+    assert(o.review.rating && o.review.lines.length === 3, 'no review');
+    assert(o.timeline.points.length > 20, 'no timeline');
+    // It's in the store: a new Meta from it sees the same save.
+    const again = new Meta(store);
+    assert(again.data.pay === o.pay && again.data.shifts === 1, 'not saved');
+    assert(again.data.achievements.first_shift, 'no Onboarding Complete');
+  }],
+  ['the shop and hiring spend pay, and the next shift uses them', () => {
+    const meta = new Meta();
+    meta.data.pay = 1000;
+    assert(meta.buy('chair') && meta.level('chair') === 1 && meta.data.pay === 940, 'chair');
+    assert(!meta.unlock('cloud'), 'hired a $3,000 tech for $940');
+    assert(meta.unlock('desktop') && meta.data.selected === 'desktop' && meta.data.pay === 640, 'desktop');
+    const sim = new Sim({}, meta);
+    assert(sim.charId === 'desktop' && sim.player.maxHp === 100, `maxHp ${sim.player.maxHp}`); // 90 + chair
+  }],
+  ['map-win unlocks wait for their map, and only built maps open', () => {
+    const meta = new Meta();
+    assert(meta.mapUnlocked('office') && !meta.mapUnlocked('server'), 'maps');
+    // The Server Room isn't built yet, so what winning it unlocks stays open.
+    assert(meta.itemUnlocked('tools', 'replyAll') && meta.itemUnlocked('characters', 'neteng'), 'locked behind an unbuilt map');
+    const r = meta.finishShift({ won: true, map: 'office', time: 1250, kills: 5000, csat: 90000, tools: [] });
+    assert(r.newMap === null && meta.data.mapsWon.includes('office'), 'office win');
+  }],
+  ['the IT Director starts with Delegate and earns more', () => {
+    const sim = new Sim({}, new Meta());
+    sim.meta.data.unlocked.push('director');
+    sim.newRun('director');
+    assert(sim.player.weapons.map((w) => w.id).join() === 'outOfOffice,delegate', sim.player.weapons.map((w) => w.id).join());
+    const plain = new Meta().finishShift({ won: false, map: 'office', time: 600, kills: 0, csat: 0, tools: [] }).pay;
+    const boss = new Meta().finishShift({ won: false, map: 'office', time: 600, kills: 0, csat: 0, tools: [], payMult: 1.25 }).pay;
+    assert(boss === Math.floor(plain * 1.25), `${boss} vs ${plain}`);
+  }],
+  ['the Cloud Engineer gets stronger every minute', () => {
+    const sim = new Sim();
+    sim.newRun('cloudEng');
+    const d0 = sim.player.stats.damage;
+    sim.player.god = true;
+    sim.spawner.stopped = true;
+    run(sim, 121, { x: 0, y: 0 });
+    assert(Math.abs(sim.player.stats.damage - d0 - 0.04) < 1e-9, `${d0} -> ${sim.player.stats.damage}`);
+  }],
+  ['the Security Manager phishing test stuns users on screen', () => {
+    const sim = new Sim();
+    sim.newRun('secmgr');
+    sim.player.god = true;
+    sim.debugClear();
+    const e = spawnEnemy(sim, 'pam', sim.player.x + 100, sim.player.y);
+    sim.perkT.phishTest = 59.99;
+    sim.tick(STEP, { x: 0, y: 0 });
+    assert(e.stun > 0.5, `stun ${e.stun}`);
+  }],
+  ['an old or broken save is cleaned up', () => {
+    const d = upgradeSave({ pay: -5, unlocked: ['nobody'], selected: 'nobody', shop: { chair: 99, gone: 2 } });
+    assert(d.pay === 0 && d.selected === 'tier1' && d.unlocked.join() === 'tier1', JSON.stringify(d));
+    assert(d.shop.chair === 5 && !('gone' in d.shop), JSON.stringify(d.shop));
   }],
 );

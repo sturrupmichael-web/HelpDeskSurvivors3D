@@ -133,20 +133,192 @@ function head(parts, skin, hair, hairStyle) {
     sphere(0.03, P.k, -0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3), // eyes (small: the outline fattens them)
     sphere(0.03, P.k, 0.11, HEAD_Y + 0.02, HEAD_R * 0.95, 0.8, 1.3, 0.5, 5, 3),
   );
+  if (hairStyle === 'none') return; // the techs do their own (hair below)
   if (hairStyle === 'bob') parts.push(hairCap(HEAD_R + 0.03, hair, HEAD_Y + 0.02, 1.95, -0.5, 1.1));
   else parts.push(hairCap(HEAD_R + 0.025, hair, HEAD_Y + 0.02, 1.45, -0.45));
 }
 
-// --- The tech -------------------------------------------------------------------------
-// Tier 1 Tech from the original sprite: brown hair, grey headset with a boom mic, blue
-// polo, yellow lanyard and white badge, navy trousers, black shoes.
-// Returns { root, legL, legR, armL, armR, body } so the renderer can animate the limbs.
-// The tech has a material of their own, so they can flash when hurt (its emissive color).
-export function createTechModel() {
+// --- The techs -----------------------------------------------------------------------
+// Every playable tech from the original's sprites (sprites/defs/characters.js), on one
+// body with moving limbs. TECH_LOOKS (keyed by data/player.js character id) says what each
+// one wears and carries:
+//   hair, skin, top, pants   colors
+//   hairStyle  'short' (default), 'bald', 'balding', 'buzz' or 'fohawk'
+//   beard      color of a short beard
+//   collar     polo collar color; hood: a hood round the neck instead
+//   shirt, tie a shirt showing at the neck, and a tie
+//   build      'chubby' or 'skinny'; size: 'tall' or 'short'
+//   headset, lanyard, glasses
+//   chest      decals and pins on the front (CHEST below)
+//   right, left  what's in each hand (HELD below); hip: something on the belt
+const TECH_LOOKS = {
+  // Tier 1 Tech: brown hair, grey headset with a boom mic, blue polo, yellow lanyard and
+  // white badge, navy trousers.
+  tier1: { hair: P.h, top: P.b, pants: P.n, collar: P.w, headset: true, lanyard: true },
+  // Desktop Support: green polo, khakis, lanyard, carrying a red toolbag.
+  desktop: { hair: P.k, skin: P.S, top: P.e, pants: P.d, collar: P.w, lanyard: true, right: 'toolbag' },
+  // SysAdmin: black tee with a terminal prompt, beard, mug of very old coffee.
+  sysadmin: { hair: P.h, beard: P.h, top: P.K, pants: P.n, chest: ['prompt'], right: 'mug' },
+  // SecOps Analyst: gray hoodie, gold shield badge, tablet with a green lock screen.
+  secops: { hair: P.r, top: P.G, pants: P.k, hood: P.G, chest: ['shield'], left: 'lockTablet' },
+  // Network Engineer: light-blue shirt, a coil of yellow patch cable over the shoulder, and
+  // a crimping tool.
+  neteng: { hair: P.h, top: P.B, pants: P.k, collar: P.B, chest: ['coil'], right: 'crimper' },
+  // Help Desk Manager: white shirt, purple tie, grey hair, reading glasses, clipboard.
+  manager: { hair: P.G, top: P.w, pants: P.n, tie: P.p, glasses: true, right: 'clipboard' },
+  // The Intern: orange hoodie, INTERN badge, carrying a tray of four coffees.
+  intern: { hair: P.y, top: P.o, pants: P.n, hood: P.o, chest: ['badge'], right: 'tray' },
+  // Cloud Architect: cyan tee with a cloud logo, laptop open on one arm.
+  cloud: { hair: P.k, top: P.q, pants: P.k, chest: ['cloud'], left: 'laptop' },
+  // Help Desk Supervisor: purple polo, headset, clipboard with the queue on it.
+  supervisor: { hair: P.h, top: P.p, pants: P.k, collar: P.w, headset: true, right: 'queueClipboard' },
+  // Systems Operations Manager: navy polo, yellow lanyard, a tablet with the fleet dashboard.
+  sysops: { hair: P.K, top: P.A, pants: P.K, collar: P.A, lanyard: true, left: 'dashboard' },
+  // IT Director: bald, short beard, navy blazer over a white shirt and red tie, leather
+  // portfolio. No headset.
+  director: { hair: P.h, hairStyle: 'bald', beard: P.h, top: P.a, pants: P.a, shirt: P.w, tie: P.r, right: 'portfolio' },
+  // CRM Analyst: blonde, chubby, black polo, two spreadsheets open on one tiny laptop.
+  crmAnalyst: { hair: P.y, top: P.K, pants: P.n, collar: P.w, build: 'chubby', right: 'spreadsheets' },
+  // CRM Manager: tall, white polo, khakis, an orange disc golf driver ready to throw.
+  crmManager: { hair: P.h, top: P.w, pants: P.d, collar: P.g, size: 'tall', right: 'disc' },
+  // Cloud Engineer: navy hoodie with a cloud logo, black hair, a pager on the belt.
+  cloudEng: { hair: P.K, skin: P.S, top: P.n, pants: P.k, hood: P.A, chest: ['cloud'], hip: 'pager' },
+  // Systems Engineer: balding, skinny, light-blue shirt, khakis, a screwdriver in the pocket.
+  syseng: { hair: P.h, hairStyle: 'balding', top: P.B, pants: P.d, collar: P.B, build: 'skinny', chest: ['pocket'] },
+  // EUC Engineer: short, skinny, green polo, a stack of fresh laptops under one arm.
+  euc: { hair: P.K, skin: P.u, top: P.e, pants: P.n, collar: P.w, build: 'skinny', size: 'short', left: 'laptops' },
+  // Security Manager: red hoodie, short black hair, short beard, a gold padlock pin.
+  secmgr: { hair: P.K, beard: P.K, top: P.r, pants: P.k, hood: P.k, chest: ['padlock'] },
+  // Security Engineer: fo-hawk, Hawaiian shirt, a laptop full of green text.
+  seceng: { hair: P.h, hairStyle: 'fohawk', top: P.o, pants: P.n, collar: P.o, chest: ['flowers'], left: 'terminal' },
+  // Asset Management Analyst: buzzcut, khaki shirt, a label gun holstered at the hip.
+  assets: { hair: P.h, hairStyle: 'buzz', top: P.d, pants: P.n, collar: P.w, hip: 'labelGun' },
+};
+
+// A point on the front of the torso at height y and angle a (0 = straight ahead), pushed
+// out by `out`: where chest decals go.
+function torsoPoint(y, a, out = 0.01, widen = 1) {
+  let r = TORSO[0][0];
+  for (let i = 1; i < TORSO.length; i++) {
+    const [r0, y0] = TORSO[i - 1];
+    const [r1, y1] = TORSO[i];
+    if (y >= y0 && y <= y1) r = r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+  }
+  r = r * widen + out;
+  return [Math.sin(a) * r, y, Math.cos(a) * r];
+}
+
+// Decals and pins on the front of the torso. `w` widens them for a chubby build.
+const CHEST = {
+  // >_ on a black tee.
+  prompt: (w) => {
+    const [x, y, z] = torsoPoint(0.66, -0.2, 0.0, w);
+    return [rotBox(0.07, 0.025, 0.02, P.e, x - 0.02, y + 0.02, z, 0, -0.2, -0.6), rotBox(0.07, 0.025, 0.02, P.e, x - 0.02, y - 0.02, z, 0, -0.2, 0.6), rotBox(0.08, 0.025, 0.02, P.e, x + 0.07, y - 0.04, z - 0.01, 0, -0.1)];
+  },
+  shield: (w) => {
+    const [x, y, z] = torsoPoint(0.74, 0.3, 0, w);
+    return [shaped(new THREE.CylinderGeometry(0.06, 0.035, 0.08, 6), P.y, x, y, z, Math.PI / 2, 0.3, 0, 1, 1, 0.35)];
+  },
+  badge: (w) => {
+    const [x, y, z] = torsoPoint(0.68, 0.15, 0.005, w);
+    return [rotBox(0.12, 0.08, 0.02, P.w, x, y, z, 0, 0.15)];
+  },
+  cloud: (w) => {
+    const [x, y, z] = torsoPoint(0.68, 0, -0.01, w);
+    return [sphere(0.05, P.w, x - 0.05, y, z, 1, 0.8, 0.4), sphere(0.06, P.w, x + 0.01, y + 0.025, z, 1, 0.8, 0.4), sphere(0.045, P.w, x + 0.06, y - 0.005, z, 1, 0.8, 0.4)];
+  },
+  padlock: (w) => {
+    const [x, y, z] = torsoPoint(0.74, 0.35, 0, w);
+    return [rotBox(0.07, 0.06, 0.03, P.y, x, y, z, 0, 0.35), paint(new THREE.TorusGeometry(0.025, 0.01, 4, 8, Math.PI), P.y, x, y + 0.03, z, 0, 0.35)];
+  },
+  // A pocket with a screwdriver in it.
+  pocket: (w) => {
+    const [x, y, z] = torsoPoint(0.72, -0.35, 0.005, w);
+    return [rotBox(0.1, 0.1, 0.02, P.b, x, y, z, 0, -0.35), capsule(0.012, 0.05, P.r, x, y + 0.08, z + 0.01), capsule(0.008, 0.04, P.g, x, y + 0.13, z + 0.01)];
+  },
+  // Yellow and green flowers on a Hawaiian shirt.
+  flowers: (w) =>
+    [[0.6, -0.5], [0.78, -0.15], [0.55, 0.25], [0.74, 0.55], [0.5, 0], [0.66, 0.9], [0.62, -0.9]].flatMap(([y, a]) => {
+      const [x, yy, z] = torsoPoint(y, a, 0, w);
+      return [sphere(0.035, P.y, x, yy, z, 1, 1, 0.5, 6, 4), sphere(0.015, P.e, x + Math.cos(a) * 0.002, yy, z + 0.012, 1, 1, 1, 4, 3)];
+    }),
+  // A coil of patch cable over the left shoulder.
+  coil: () => [paint(new THREE.TorusGeometry(0.15, 0.025, 4, 12), P.y, -0.18, 0.86, 0.02, 0, Math.PI / 2 - 0.3, 0.7), capsule(0.02, 0.06, P.y, -0.2, 0.68, 0.22)],
+};
+
+// Held things, in the arm's own space: the hand is at about (side * 0.07, -0.42, 0).
+// `s` is the side (-1 left, 1 right).
+const laptop = (screen, s, extra = []) => [
+  rotBox(0.32, 0.03, 0.22, P.g, s * 0.1, -0.45, 0.12),
+  rotBox(0.32, 0.22, 0.025, P.k, s * 0.1, -0.33, 0.01, -0.25),
+  rotBox(0.28, 0.18, 0.03, screen, s * 0.1, -0.33, 0.013, -0.25),
+  ...extra,
+];
+const tablet = (screen, s, extra = []) => [rotBox(0.22, 0.28, 0.03, P.k, s * 0.04, -0.4, 0.14, -0.7), rotBox(0.18, 0.23, 0.03, screen, s * 0.04, -0.395, 0.15, -0.7), ...extra];
+const board = (s, lines) => [
+  rotBox(0.22, 0.3, 0.025, P.d, s * 0.06, -0.38, 0.12, -0.35),
+  rotBox(0.18, 0.24, 0.03, P.w, s * 0.06, -0.39, 0.125, -0.35),
+  rotBox(0.08, 0.035, 0.035, P.G, s * 0.06, -0.24, 0.07, -0.35),
+  ...lines.map((c, i) => rotBox(0.12, 0.025, 0.035, c, s * 0.06, -0.33 - i * 0.05, 0.11 + i * 0.018, -0.35)),
+];
+const HELD = {
+  toolbag: (s) => [rotBox(0.24, 0.16, 0.13, P.r, s * 0.08, -0.6, 0.02), rotBox(0.06, 0.03, 0.135, P.w, s * 0.08, -0.6, 0.025), paint(new THREE.TorusGeometry(0.05, 0.014, 4, 8, Math.PI), P.k, s * 0.08, -0.52, 0.02)],
+  mug: (s) => [cyl(0.065, 0.06, 0.13, P.w, s * 0.08, -0.5, 0.1), cyl(0.055, 0.055, 0.01, P.h, s * 0.08, -0.375, 0.1), paint(new THREE.TorusGeometry(0.035, 0.012, 4, 8), P.w, s * 0.15, -0.44, 0.1, 0, Math.PI / 2)],
+  lockTablet: (s) => tablet(P.B, s, [rotBox(0.07, 0.07, 0.035, P.e, s * 0.04, -0.4, 0.155, -0.7)]),
+  crimper: (s) => [capsule(0.018, 0.12, P.G, s * 0.06, -0.5, 0.06, 0.4, s * 0.25), capsule(0.018, 0.12, P.G, s * 0.1, -0.5, 0.06, 0.4, -s * 0.25), rotBox(0.04, 0.04, 0.04, P.y, s * 0.08, -0.6, 0.11)],
+  clipboard: (s) => board(s, [P.r, P.r, P.e]),
+  queueClipboard: (s) => board(s, [P.B, P.B, P.B]),
+  tray: (s) => [
+    rotBox(0.34, 0.03, 0.22, P.d, s * 0.04, -0.45, 0.14),
+    ...[[-0.09, 0.08], [0.09, 0.08], [-0.09, 0.2], [0.09, 0.2]].flatMap(([x, z]) => [cyl(0.04, 0.035, 0.11, P.w, s * 0.04 + x, -0.435, z), cyl(0.042, 0.042, 0.02, P.h, s * 0.04 + x, -0.33, z)]),
+  ],
+  laptop: (s) => laptop(P.B, s),
+  dashboard: (s) => tablet(P.n, s, [[-0.05, 0.03], [0.04, 0.03], [-0.05, -0.05], [0.04, -0.05]].map(([x, y], i) => rotBox(0.06, 0.05, 0.035, i === 2 ? P.r : P.e, s * 0.04 + x, -0.4 + y, 0.155 - y * 0.6, -0.7))),
+  portfolio: (s) => [rotBox(0.24, 0.3, 0.04, P.h, s * 0.1, -0.5, 0.0, 0, 0, 0)],
+  spreadsheets: (s) => laptop(P.w, s, [rotBox(0.02, 0.18, 0.035, P.k, s * 0.1, -0.33, 0.016, -0.25), rotBox(0.1, 0.03, 0.035, P.e, s * 0.04, -0.3, 0.02, -0.25), rotBox(0.1, 0.03, 0.035, P.e, s * 0.16, -0.36, 0.035, -0.25)]),
+  disc: (s) => [shaped(new THREE.CylinderGeometry(0.14, 0.14, 0.035, 12), P.o, s * 0.12, -0.42, 0.1, 0.3, 0, Math.PI / 2 - 0.2), shaped(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 10), P.w, s * 0.12, -0.42, 0.1, 0.3, 0, Math.PI / 2 - 0.2)],
+  laptops: (s) => [P.g, P.G, P.g].map((c, i) => rotBox(0.07, 0.26, 0.34, c, s * 0.06, -0.32 + i * 0.075, 0.04)),
+  terminal: (s) => laptop(P.k, s, [[0.05, -0.32], [0, -0.36], [0.08, -0.4]].map(([x, y]) => rotBox(0.1, 0.022, 0.035, P.e, s * 0.1 + x - 0.04, y + 0.03, 0.02 + (-0.33 - y) * 0.25, -0.25))),
+};
+
+// Things on the belt, in the body's space.
+const HIP = {
+  pager: () => [rotBox(0.1, 0.08, 0.05, P.k, 0.25, 0.47, 0.08, 0, 0.6), rotBox(0.06, 0.03, 0.02, P.e, 0.265, 0.48, 0.11, 0, 0.6)],
+  labelGun: () => [rotBox(0.08, 0.16, 0.12, P.k, 0.27, 0.42, 0.02), rotBox(0.07, 0.1, 0.16, P.y, 0.28, 0.52, 0.05), rotBox(0.06, 0.05, 0.08, P.w, 0.29, 0.52, 0.15)],
+};
+
+// Hair for each style, on a head of radius HEAD_R at HEAD_Y.
+function hair(parts, color, style) {
+  if (style === 'bald') return; // the beard and a shine do the work
+  if (style === 'balding') {
+    // A horseshoe round the back and sides.
+    parts.push(paint(new THREE.TorusGeometry(HEAD_R * 0.97, 0.075, 5, 12, Math.PI * 1.25), color, 0, HEAD_Y + 0.02, -0.03, Math.PI / 2, 0, Math.PI * 0.875));
+    return;
+  }
+  if (style === 'buzz') {
+    parts.push(hairCap(HEAD_R + 0.012, color, HEAD_Y + 0.02, 1.4, -0.45, 1.01));
+    return;
+  }
+  if (style === 'fohawk') {
+    // Shaved sides, one ridge front to back.
+    parts.push(shaped(new THREE.SphereGeometry(0.1, 6, 5), color, 0, HEAD_Y + HEAD_R - 0.01, -0.04, 0, 0, 0, 0.7, 1.15, 3.2));
+    return;
+  }
+  parts.push(hairCap(HEAD_R + 0.025, color, HEAD_Y + 0.02, 1.45, -0.45));
+}
+
+// Returns { root, legL, legR, armL, armR, body, material } so the renderer can animate
+// the limbs. Each tech has a material of their own, so they can flash when hurt (its
+// emissive color).
+export function createTechModel(id = 'tier1') {
+  const look = TECH_LOOKS[id] ?? TECH_LOOKS.tier1;
+  const skin = look.skin ?? P.s;
+  const wide = look.build === 'chubby' ? 1.22 : look.build === 'skinny' ? 0.86 : 1;
   const material = toonMaterial.clone();
   const root = new THREE.Group();
   const body = new THREE.Group(); // bobs while walking
   root.add(body);
+  if (look.size) body.scale.setScalar(look.size === 'tall' ? 1.08 : 0.9);
   const mesh = (geo) => {
     const m = new THREE.Mesh(geo, material);
     m.castShadow = true;
@@ -156,19 +328,22 @@ export function createTechModel() {
   // Legs hang from the hip, so they can swing: trouser leg and a round shoe.
   const leg = (side) => {
     const g = new THREE.Group();
-    g.position.set(side * 0.11, 0.5, 0);
-    g.add(mesh(merge([capsule(0.095, 0.24, P.n, 0, -0.22, 0), sphere(0.12, P.k, 0, -0.44, 0.05, 1, 0.6, 1.35)])));
+    g.position.set(side * 0.11 * Math.min(1.1, wide), 0.5, 0);
+    const r = look.build === 'skinny' ? 0.08 : 0.095;
+    g.add(mesh(merge([capsule(r, 0.24, look.pants, 0, -0.22, 0), sphere(0.12, P.k, 0, -0.44, 0.05, 1, 0.6, 1.35)])));
     body.add(g);
     return g;
   };
-  // Arms hang from the shoulder: sleeve, forearm, hand.
+  // Arms hang from the shoulder: sleeve, forearm, hand, and whatever that hand holds.
   const arm = (side) => {
     const g = new THREE.Group();
-    g.position.set(side * 0.3, 0.88, 0);
+    g.position.set(side * (0.3 * wide + (wide > 1 ? 0.02 : 0)), 0.88, 0);
+    const held = look[side > 0 ? 'right' : 'left'];
     g.add(mesh(merge([
-      capsule(0.08, 0.14, P.b, side * 0.02, -0.12, 0, 0, side * 0.15),
-      capsule(0.06, 0.12, P.s, side * 0.05, -0.3, 0, 0, side * 0.15),
-      sphere(0.075, P.s, side * 0.07, -0.42, 0.01),
+      capsule(0.08, 0.14, look.top, side * 0.02, -0.12, 0, 0, side * 0.15),
+      capsule(0.06, 0.12, look.hood || look.shirt ? look.top : skin, side * 0.05, -0.3, 0, 0, side * 0.15),
+      sphere(0.075, skin, side * 0.07, -0.42, 0.01),
+      ...(held ? HELD[held](side) : []),
     ])));
     body.add(g);
     return g;
@@ -178,25 +353,52 @@ export function createTechModel() {
   const armL = arm(-1);
   const armR = arm(1);
 
+  const torso = lathe(TORSO, look.top);
+  if (wide !== 1) torso.scale(wide, 1, wide);
   const parts = [
-    lathe(TORSO, P.b), // polo
-    paint(new THREE.CylinderGeometry(0.235, 0.235, 0.06, 12), P.k, 0, 0.45, 0), // belt
-    paint(new THREE.TorusGeometry(0.13, 0.045, 5, 12), P.w, 0, 0.96, 0, Math.PI / 2), // collar
-    // Lanyard and badge on the chest.
-    capsule(0.016, 0.2, P.y, -0.07, 0.8, 0.255, -0.35, 0.25),
-    capsule(0.016, 0.2, P.y, 0.07, 0.8, 0.255, -0.35, -0.25),
-    rotBox(0.13, 0.16, 0.03, P.w, 0, 0.66, 0.285),
-    rotBox(0.09, 0.035, 0.035, P.B, 0, 0.71, 0.29),
+    torso,
+    paint(new THREE.CylinderGeometry(0.235 * wide, 0.235 * wide, 0.06, 12), P.k, 0, 0.45, 0), // belt
   ];
-  head(parts, P.s, P.h, 'short');
-  parts.push(
-    // Headset: a band over the top, ear cups, boom mic to the mouth.
-    paint(new THREE.TorusGeometry(HEAD_R + 0.05, 0.025, 4, 14, Math.PI), P.G, 0, HEAD_Y, 0),
-    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, -HEAD_R - 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
-    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, HEAD_R + 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
-    capsule(0.016, 0.26, P.G, -0.27, HEAD_Y - 0.1, 0.17, Math.PI / 2, 0.0),
-    sphere(0.035, P.k, -0.16, HEAD_Y - 0.13, 0.31),
-  );
+  if (look.collar) parts.push(paint(new THREE.TorusGeometry(0.13, 0.045, 5, 12), look.collar, 0, 0.96, 0, Math.PI / 2));
+  if (look.hood) parts.push(shaped(new THREE.TorusGeometry(0.17, 0.07, 5, 12), look.hood, 0, 0.95, -0.05, Math.PI / 2 - 0.35, 0, 0, 1, 1, 1));
+  // A shirt showing at the neck as a V, and a tie down the front.
+  if (look.shirt) parts.push(shaped(new THREE.ConeGeometry(0.11, 0.24, 3), look.shirt, 0, 0.86, 0.22 * wide, 0, 0, Math.PI, 1, 1, 0.45));
+  if (look.tie) {
+    const [, , z] = torsoPoint(0.76, 0, 0.0, wide);
+    parts.push(capsule(0.035, 0.22, look.tie, 0, 0.76, z - 0.02, -0.2), rotBox(0.07, 0.05, 0.05, look.tie, 0, 0.9, 0.2 * wide));
+  }
+  if (look.lanyard) {
+    // Lanyard and badge on the chest.
+    parts.push(
+      capsule(0.016, 0.2, P.y, -0.07, 0.8, 0.255 * wide, -0.35, 0.25),
+      capsule(0.016, 0.2, P.y, 0.07, 0.8, 0.255 * wide, -0.35, -0.25),
+      rotBox(0.13, 0.16, 0.03, P.w, 0, 0.66, 0.285 * wide),
+      rotBox(0.09, 0.035, 0.035, P.B, 0, 0.71, 0.29 * wide),
+    );
+  }
+  for (const c of look.chest ?? []) parts.push(...CHEST[c](wide));
+  if (look.hip) parts.push(...HIP[look.hip]());
+
+  head(parts, skin, P.h, 'none');
+  hair(parts, look.hair, look.hairStyle);
+  if (look.beard) {
+    // Round the jaw, below the eyes.
+    parts.push(paint(new THREE.SphereGeometry(HEAD_R + 0.015, 10, 6, 0, Math.PI, Math.PI * 0.6, Math.PI * 0.28), look.beard, 0, HEAD_Y, 0));
+  }
+  if (look.glasses) {
+    for (const x of [-0.11, 0.11]) parts.push(paint(new THREE.TorusGeometry(0.055, 0.012, 4, 10), P.g, x, HEAD_Y + 0.02, HEAD_R * 0.98));
+    parts.push(rotBox(0.1, 0.015, 0.015, P.g, 0, HEAD_Y + 0.03, HEAD_R * 1.0));
+  }
+  if (look.headset) {
+    // A band over the top, ear cups, boom mic to the mouth.
+    parts.push(
+      paint(new THREE.TorusGeometry(HEAD_R + 0.05, 0.025, 4, 14, Math.PI), P.G, 0, HEAD_Y, 0),
+      paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, -HEAD_R - 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
+      paint(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 10), P.k, HEAD_R + 0.03, HEAD_Y - 0.02, 0, 0, 0, Math.PI / 2),
+      capsule(0.016, 0.26, P.G, -0.27, HEAD_Y - 0.1, 0.17, Math.PI / 2, 0.0),
+      sphere(0.035, P.k, -0.16, HEAD_Y - 0.13, 0.31),
+    );
+  }
   body.add(mesh(merge(parts)));
   return { root, body, legL, legR, armL, armR, material };
 }

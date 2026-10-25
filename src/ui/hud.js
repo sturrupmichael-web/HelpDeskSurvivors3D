@@ -2,8 +2,7 @@
 // tickets closed and CSAT, the event banner, the boss bar, a pause button, and an arrow at
 // the screen edge pointing to an off-screen Change Approved chest.
 // Ported from the original's src/ui/hud.js. Values are cached so the DOM is only touched
-// when something changes. Not yet ported: Shift Policies, the training coach and
-// achievement toasts.
+// when something changes. Not yet ported: Shift Policies and the training coach.
 
 import { icon } from './icons.js';
 import { SHIFT_LENGTH, OVERTIME } from '../../data/waves.js';
@@ -49,7 +48,11 @@ export class Hud {
     this.pauseButton.setAttribute('aria-label', 'Pause');
     this.pauseButton.textContent = 'II';
     this.pauseButton.addEventListener('click', onPause);
-    root.append(this.root, this.pauseButton);
+    // Achievement toasts live outside the HUD so they also show on menus.
+    this.toasts = document.createElement('div');
+    this.toasts.className = 'toasts';
+    this.toasts.setAttribute('role', 'status'); // screen readers announce new achievements
+    root.append(this.root, this.pauseButton, this.toasts);
     const q = (s) => this.root.querySelector(s);
     this.el = {
       xp: q('.hud-xp i'), level: q('.hud-level'), timer: q('.hud-timer .t'), shift: q('.shift'),
@@ -62,6 +65,17 @@ export class Hud {
     this.cache = {};
     this.bannerT = 0;
     this.pt = { x: 0, y: 0 };
+  }
+
+  // "Achievement unlocked" toast for a data/achievements.js entry.
+  toast(a) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = `${icon(a.icon, 32)}<div><small>${a.label ?? 'ACHIEVEMENT UNLOCKED'}</small><b></b></div>`;
+    t.querySelector('b').textContent = a.name;
+    this.toasts.appendChild(t);
+    setTimeout(() => t.classList.add('out'), 3500);
+    setTimeout(() => t.remove(), 4000);
   }
 
   setMuted(m) {

@@ -271,6 +271,7 @@ export function damageEnemy(game, e, amount, weapon, dx, dy, knockback) {
   if (!e.heavy) e.flash = 0.12;
   else if (e.flash < -0.2) e.flash = 0.06;
   if (weapon) weapon.damageDone += Math.min(amount, e.hp + amount);
+  game.timeline.damage += Math.min(amount, e.hp + amount);
   game.number(e.x, e.y, amount);
   game.sfx(e.def.boss ? 'bosshit' : 'hit', e.x);
   if (knockback && (dx || dy)) {
@@ -319,6 +320,7 @@ export function killEnemy(game, e, weapon) {
   }
   game.burst(e.x, e.y, e.def.particle, 6);
   game.sfx('pop', e.x);
+  game.achievements.onKill(e.def.sprite);
   rollItemDrops(game, e);
   if (e.def.boss) game.onBossDown(e);
   const od = e.def.onDeath;

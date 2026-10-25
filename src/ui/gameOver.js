@@ -1,28 +1,53 @@
-// The end-of-shift summary: BURNOUT (or CLOCKED OUT, once the final boss is in), the run's
-// stats, damage by tool and the passives taken, then Next Shift.
-// Ported from the original's src/ui/screens/gameOver.js. Not yet ported: pay and records,
-// unlocks, the timeline chart, the performance review, the leaderboard, and the shop and
-// tech/map picker buttons.
+// The end-of-shift summary: BURNOUT (or CLOCKED OUT), the run's stats and records, the
+// Overtime Pay earned, what a map win unlocked, damage by tool and the passives taken, the
+// shift timeline and the HR performance review, then Next Shift, Change Tech, the shop or
+// the title.
+// Ported from the original's src/ui/screens/gameOver.js. Not yet ported: the Knowledge
+// Base and Shift Policy lines (M12) and posting to the leaderboard (M13).
 
 import { icon } from './icons.js';
 import { fmtTime } from './hud.js';
+import { PAY } from './menus.js';
+import { timelineChart, wireTimeline } from './timeline.js';
 import { BURNOUT_QUIPS, VICTORY_QUIPS } from '../../data/flavor.js';
+import { CHARACTERS } from '../../data/player.js';
+import { WEAPONS } from '../../data/weapons.js';
+import { PASSIVES } from '../../data/passives.js';
+import { MAPS } from '../../data/maps.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
 const READY_DELAY = 600; // ms: don't let a held key skip the summary
 const ITEM_HINT = 'Hover or tap a tool or passive to see what it does.';
 const itemLevel = (t) => (t.level >= t.maxLevel ? 'MAX' : `Lv ${t.level}`);
+// Display name of a map-win unlock ({ kind, id } from Meta.unlocksFor).
+const unlockName = ({ kind, id }) =>
+  kind === 'characters' ? `${CHARACTERS[id].name} (hire)` : kind === 'passives' ? PASSIVES[id].name : kind === 'evolutions' ? `${WEAPONS[id].name} (evolution)` : WEAPONS[id].name;
+
+// The HR performance review (worked out in src/sim/review.js).
+function reviewCard(s) {
+  const r = s.review;
+  const stars = '★'.repeat(r.stars) + '☆'.repeat(5 - r.stars);
+  return `<div class="review rating-${r.ratingId}">
+    <div class="review-head"><span>PERFORMANCE REVIEW</span><span>${s.character}</span></div>
+    <div class="review-rating"><span class="review-stars" aria-label="${r.stars} out of 5">${stars}</span><b>${r.rating}</b></div>
+    <div class="review-label">Manager's comments</div>
+    <ul>${r.lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+    <div class="review-goal"><span class="review-label">Goal for next quarter</span> ${r.goal}</div>
+    <div class="review-sign">Signed, <i>${r.manager}</i></div>
+  </div>`;
+}
 
 export class GameOverScreen {
-  // `onAgain()`: start the next shift.
-  constructor(root, onAgain) {
-    this.onAgain = onAgain;
+  // `onAct(act)`: 'again' (the next shift), 'switch' (change tech), 'shop' or 'title'.
+  constructor(root, onAct) {
+    this.onAct = onAct;
     this.el = document.createElement('div');
     this.el.className = 'screen';
     this.el.hidden = true;
     root.append(this.el);
     this.el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-act=again]')) this.again();
+      const b = e.target.closest('.summary-buttons button');
+      if (b) this.go(b.dataset.act);
     });
     this.shownFor = null;
     this.readyAt = 0;
@@ -41,6 +66,7 @@ export class GameOverScreen {
   }
 
   show(s) {
+    const rec = (k) => (s.records.includes(k) ? ' <b class="record">NEW RECORD</b>' : '');
     const topDamage = Math.max(1, ...s.tools.map((t) => t.damage));
     const items = [...s.tools, ...s.passives];
     const tools = s.tools
@@ -59,34 +85,46 @@ export class GameOverScreen {
       <div class="panel wide summary ${s.won ? 'win' : 'lose'}">
         <h1>${s.won ? 'CLOCKED OUT!' : 'BURNOUT'}</h1>
         <p class="sub">${pickLine(s.won ? VICTORY_QUIPS : BURNOUT_QUIPS)}</p>
+        ${s.newMap ? `<p class="unlock">NEW MAP UNLOCKED: <b>${MAPS[s.newMap].name}</b> (pick it when you Clock In)</p>` : ''}
+        ${s.newUnlocks?.length ? `<p class="unlock">NOW AVAILABLE: ${s.newUnlocks.map((u) => `<b>${unlockName(u)}</b>`).join(', ')}</p>` : ''}
         <div class="summary-cols">
           <table class="stats">
             <tr><td>Technician</td><td>${s.character}</td></tr>
             <tr><td>Map</td><td>${s.mapName}</td></tr>
-            <tr><td>Time survived</td><td>${fmtTime(s.time)}</td></tr>
-            <tr><td>Tickets closed</td><td>${s.kills.toLocaleString()}</td></tr>
-            <tr><td>CSAT score</td><td>${s.csat.toLocaleString()}</td></tr>
+            <tr><td>Time survived</td><td>${fmtTime(s.time)}${rec('time')}</td></tr>
+            <tr><td>Tickets closed</td><td>${s.kills.toLocaleString()}${rec('tickets')}</td></tr>
+            <tr><td>CSAT score</td><td>${s.csat.toLocaleString()}${rec('csat')}</td></tr>
             <tr><td>Best streak</td><td>x${s.bestStreak}</td></tr>
             <tr><td>Level reached</td><td>${s.level}</td></tr>
+            <tr class="paid"><td>Overtime Pay earned</td><td>+${PAY(s.pay)}</td></tr>
+            <tr><td>Balance</td><td>${PAY(s.balance)}</td></tr>
           </table>
           <div class="tools item-list"><div class="tools-head">Damage by tool</div>${tools || '<div class="tool-lvl">No tools this shift.</div>'}
             ${passives ? `<div class="tools-head passives-head">Passives</div>${passives}` : ''}
             <p class="item-info" aria-live="polite">${ITEM_HINT}</p>
           </div>
         </div>
+        ${timelineChart(s.timeline)}
+        ${reviewCard(s)}
         <div class="summary-buttons">
           <button class="primary" data-act="again">Next Shift <kbd>Enter</kbd></button>
+          <button data-act="switch">Change Tech or Map <kbd>C</kbd></button>
+          <button data-act="shop">Overtime Shop <kbd>S</kbd></button>
+          <button data-act="title">Title <kbd>Esc</kbd></button>
         </div>
       </div>`;
     this.el.hidden = false;
+    this.el.querySelector('.panel').scrollTop = 0;
     this.readyAt = performance.now() + READY_DELAY;
+    wireTimeline(this.el, s.timeline);
     wireItems(this.el, items);
   }
 
-  again() {
+  go(act) {
     if (performance.now() < this.readyAt) return;
     this.readyAt = Infinity;
-    this.onAgain();
+    this.el.hidden = true; // now, not on the next frame: the menus take the keys from here
+    this.onAct(act);
   }
 
   // Keyboard and gamepad. Returns true if it used the key (it takes them all while open,
@@ -94,7 +132,10 @@ export class GameOverScreen {
   key(code) {
     if (!this.open) return false;
     if (code === 'KeyF' || code === 'KeyO' || code === 'KeyM') return false;
-    if (code === 'Enter' || code === 'Space' || code === 'PadA' || code === 'PadStart') this.again();
+    if (code === 'Enter' || code === 'Space' || code === 'PadA' || code === 'PadStart') this.go('again');
+    else if (code === 'KeyC') this.go('switch');
+    else if (code === 'KeyS') this.go('shop');
+    else if (code === 'Escape' || code === 'PadB') this.go('title');
     return true;
   }
 }

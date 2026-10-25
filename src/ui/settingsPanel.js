@@ -77,6 +77,8 @@ export class SettingsPanel {
         <button data-play="god">God mode <kbd>5</kbd></button>
         <button data-play="clear">Clear users <kbd>6</kbd></button>
         <button data-play="restart">New shift <kbd>R</kbd></button>
+        <button data-play="pay">+$1,000 Overtime Pay <kbd>G</kbd></button>
+        <button data-play="wipe" class="confirm">Wipe the save</button>
       </div>
       <div class="row buttons"><button data-act="close">Close <kbd>O</kbd></button></div>`;
   }
@@ -85,6 +87,12 @@ export class SettingsPanel {
     const b = e.target.closest('button');
     if (!b) return;
     const s = this.s;
+    if (b.dataset.play === 'wipe' && !b.classList.contains('armed')) {
+      // Pay, techs, shop, records and achievements all go: ask again.
+      b.classList.add('armed');
+      b.textContent = 'Wipe everything? Tap again';
+      return;
+    }
     if (b.dataset.play) {
       this.playtest(b.dataset.play);
       return this.toggle(false);

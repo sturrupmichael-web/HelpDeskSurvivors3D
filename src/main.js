@@ -1,4 +1,5 @@
-// Entry point: start input, the simulation, the 3D view and the page UI, then the loop.
+// Entry point: start input, the save, the simulation, the 3D view and the page UI, then
+// the loop. The game opens on the title screen, over the office floor.
 
 import { initInput, moveAxis, pollGamepad, onKeyPress } from './engine/input.js';
 import { startLoop } from './engine/loop.js';
@@ -12,6 +13,8 @@ import { Hud } from './ui/hud.js';
 import { LevelUpScreen } from './ui/levelUp.js';
 import { PauseScreen } from './ui/pause.js';
 import { GameOverScreen } from './ui/gameOver.js';
+import { Menus } from './ui/menus.js';
+import { Meta } from './sim/meta.js';
 import { Floaters } from './ui/floaters.js';
 import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusic, stopMusic, duckMusic } from './engine/audio.js';
 import { setHaptics } from './engine/haptics.js';
@@ -31,6 +34,12 @@ const floaters = new Floaters(ui); // under the HUD
 const hud = new Hud(ui, () => sim.pause());
 hud.setMuted(isMuted());
 const banner = { show: (title, text, seconds) => hud.banner(title, text, seconds) };
+// The save lives in localStorage; a private window or blocked storage just forgets it.
+const SAVE_KEY = 'helpdesk-survivors-3d.save.v1';
+const meta = new Meta({
+  load: () => JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null'),
+  save: (d) => localStorage.setItem(SAVE_KEY, JSON.stringify(d)),
+});
 const sim = new Sim({
   banner: banner.show,
   shake: (amount) => view?.rig.shake(amount),
@@ -39,7 +48,8 @@ const sim = new Sim({
   burst: (x, y, colors, n) => view?.fx.burst(x, y, colors, n),
   number: (x, y, amount) => floaters.number(x, y, amount),
   text: (x, y, words, color) => floaters.text(x, y, words, color),
-});
+  toast: (a) => hud.toast(a),
+}, meta);
 // Antialiasing is fixed when the renderer is made: off on phones, where it costs most.
 view = new View(canvas, sim, { antialias: !isTouchDevice() });
 const fps = new FpsCounter(ui);
@@ -49,23 +59,53 @@ const levelUp = new LevelUpScreen(
   ui,
   (card, always) => sim.choose(card, always),
   () => sim.closeChest(),
+  () => sim.reroll(),
 );
 const pause = new PauseScreen(ui, {
   onResume: () => sim.resume(),
   onRestart: () => newShift(),
+  onQuit: () => toMenu().title(),
   onSettings: () => panel.toggle(true),
   onMute: () => mute(),
   muted: isMuted,
 });
-const gameOver = new GameOverScreen(ui, () => newShift());
-// The gear and Settings panel go on top of the screens.
-ui.append(panel.button, panel.panel);
+const gameOver = new GameOverScreen(ui, (act) => {
+  if (act === 'again') newShift();
+  else if (act === 'switch') toMenu().setup('char');
+  else if (act === 'shop') toMenu().shop();
+  else toMenu().title();
+});
+const menus = new Menus(ui, {
+  sim,
+  portrait: (id) => view.portrait(id),
+  onStart: () => newShift(),
+  onPreview: () => reset(),
+  onSettings: () => panel.toggle(true),
+  sfx,
+});
+// The gear and Settings panel go on top of the screens, and the toasts on top of those.
+ui.append(panel.button, panel.panel, hud.toasts);
 
-function newShift() {
+// A fresh floor with the picked tech on it.
+function reset() {
   sim.newRun();
   view.resetCamera();
   view.fx.clear();
   floaters.clear();
+}
+
+function newShift() {
+  menus.hide();
+  sim.menu = false;
+  reset();
+}
+
+// Back to the menus between shifts (the title, the Clock In picker, the shop): the floor
+// waits with the tech on it. Returns the menus, to show one.
+function toMenu() {
+  sim.menu = true;
+  reset();
+  return menus;
 }
 
 function mute() {
@@ -114,9 +154,18 @@ function playtest(act) {
     p.god = !p.god;
     banner.show(p.god ? 'GOD MODE ON' : 'GOD MODE OFF', p.god ? 'Users can no longer hurt you.' : 'Careful now.', 1.5);
   } else if (act === 'clear') sim.debugClear();
-  else if (act === 'restart') newShift();
+  else if (act === 'restart' && !sim.menu) newShift();
+  else if (act === 'pay') {
+    meta.data.pay += 1000;
+    meta.save();
+    menus.refresh();
+    banner.show('+$1,000 OVERTIME PAY', `Balance: $${meta.data.pay.toLocaleString()}. Spend it in the Overtime Shop or on a new tech.`, 2);
+  } else if (act === 'wipe') {
+    meta.reset();
+    toMenu().title();
+  }
 }
-const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', KeyT: 'swap', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyB: 'boss', Equal: 'boss', KeyK: 'hitboss', KeyR: 'restart' };
+const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', KeyT: 'swap', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyB: 'boss', Equal: 'boss', KeyK: 'hitboss', KeyR: 'restart', KeyG: 'pay' };
 
 // Keys go to the topmost thing on screen: Settings, then the summary, the cards, the pause
 // menu, and last the floor. F (FPS counter) works everywhere.
@@ -132,13 +181,18 @@ onKeyPress((code) => {
     if (code === 'KeyO' || code === 'Escape' || code === 'PadB') panel.toggle(false);
     return;
   }
-  if (gameOver.key(code) || levelUp.key(code) || pause.key(code)) return;
+  if (gameOver.key(code) || menus.key(code) || levelUp.key(code) || pause.key(code)) return;
   if (code === 'KeyM') mute();
   else if (code === 'KeyO') panel.toggle(true);
-  else if (sim.over || sim.waiting) return;
+  else if (code === 'KeyG') playtest('pay'); // works on the menus too, to try the shop and techs
+  else if (sim.over || sim.waiting || sim.menu) return;
   else if (code === 'Escape' || code === 'KeyP' || code === 'PadStart') sim.pause();
   else if (PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);
 });
+
+let hudHidden = false;
+sim.menu = true;
+menus.title();
 
 // Hiding the tab (or the phone's screen going off) puts the shift on hold.
 document.addEventListener('visibilitychange', () => document.hidden && sim.pause());
@@ -151,6 +205,7 @@ startLoop(
     pollGamepad(dt);
     view.render(dt, alpha);
     stick.update();
+    if (sim.menu !== hudHidden) hud.setVisible(!(hudHidden = sim.menu));
     hud.update(dt, sim, view);
     floaters.update(dt, view, sim.frozen);
     music();

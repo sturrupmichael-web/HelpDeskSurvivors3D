@@ -57,8 +57,10 @@ export class View {
 
     this.floor = new FloorView(this.scene, sim.floor);
 
-    this.tech = createTechModel();
-    this.scene.add(this.tech.root);
+    this.tech = null;
+    this.techId = null;
+    this.setTech(sim.charId);
+    this.portraits = new Map(); // tech id -> image URL, for the menus
     this.fall = 0; // 0 standing .. 1 flat on the floor after a burnout
     // Blob shadow under the tech, shown when real shadows are off.
     this.blob = new THREE.Mesh(
@@ -117,6 +119,65 @@ export class View {
     this.size.w = 0; // force a resize so the new pixel ratio takes effect
   }
 
+  // Swaps the tech's model (a new shift with another tech).
+  setTech(id) {
+    if (this.tech) {
+      this.scene.remove(this.tech.root);
+      this.tech.root.traverse((o) => o.isMesh && o.material !== outlineMaterial && o.geometry.dispose());
+      this.tech.material.dispose();
+    }
+    this.tech = createTechModel(id);
+    this.techId = id;
+    this.scene.add(this.tech.root);
+  }
+
+  // A picture of a tech for the menus (an image URL), rendered once and kept.
+  portrait(id) {
+    let url = this.portraits.get(id);
+    if (url) return url;
+    const size = 128;
+    if (!this.portraitScene) {
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight('#e4ecff', '#4a4550', 2.2));
+      const sun = new THREE.DirectionalLight('#fff1dc', 2.2);
+      sun.position.set(-2, 4, 5);
+      scene.add(sun);
+      const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 20);
+      camera.position.set(0.9, 1.5, 3.7);
+      camera.lookAt(0, 0.86, 0);
+      const target = new THREE.WebGLRenderTarget(size, size, { samples: 4 });
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      this.portraitScene = { scene, camera, target, canvas, pixels: new Uint8Array(size * size * 4) };
+    }
+    const { scene, camera, target, canvas, pixels } = this.portraitScene;
+    const model = createTechModel(id);
+    model.root.rotation.y = 0.35;
+    model.armR.rotation.x = -0.25; // show what they carry
+    scene.add(model.root);
+    const r = this.renderer;
+    const clear = r.getClearAlpha();
+    r.setClearAlpha(0);
+    r.setRenderTarget(target);
+    r.clear();
+    r.render(scene, camera);
+    r.readRenderTargetPixels(target, 0, 0, size, size, pixels);
+    r.setRenderTarget(null);
+    r.setClearAlpha(clear);
+    scene.remove(model.root);
+    model.root.traverse((o) => o.isMesh && o.material !== outlineMaterial && o.geometry.dispose());
+    model.material.dispose();
+    // WebGL rows run bottom to top.
+    const g = canvas.getContext('2d');
+    const img = g.createImageData(size, size);
+    for (let y = 0; y < size; y++) img.data.set(pixels.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), y * size * 4);
+    g.putImageData(img, 0, 0);
+    url = canvas.toDataURL();
+    this.portraits.set(id, url);
+    return url;
+  }
+
   setCamera(opts) {
     this.rig.setOptions(opts);
   }
@@ -148,6 +209,7 @@ export class View {
   // `alpha`: how far between the last two ticks to draw (0..1).
   render(dt, alpha) {
     this.resize();
+    if (this.sim.charId !== this.techId) this.setTech(this.sim.charId);
     const p = this.sim.player;
     // Everything is drawn at its feet, which is where the simulation collides with furniture.
     const x = px(lerp(p.px, p.x, alpha));
@@ -179,10 +241,12 @@ export class View {
     const p = this.sim.player;
     const t = this.tech;
     t.root.position.set(x, 0, z);
-    // Turn smoothly toward the facing direction, the short way round.
+    // Turn smoothly toward the facing direction, the short way round. Between shifts
+    // (title, Clock In) the tech turns slowly on the spot instead, showing off.
     let d = p.facing - this.techYaw;
     d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
-    this.techYaw += d * Math.min(1, TURN_RATE * dt);
+    if (this.sim.menu) this.techYaw += dt * 0.6;
+    else this.techYaw += d * Math.min(1, TURN_RATE * dt);
     t.root.rotation.y = this.techYaw;
     // Burned out: keel over toward the camera.
     this.fall = this.sim.over && !this.sim.over.won ? Math.min(1, this.fall + dt * 2.5) : 0;

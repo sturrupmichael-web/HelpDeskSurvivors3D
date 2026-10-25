@@ -28,8 +28,11 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | --- | --- |
 | WASD / Arrow keys / left stick | Move |
 | Touch | Put a finger down anywhere and drag (floating joystick) |
-| Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts from the pause menu (press twice) |
-| Enter / Space | Next Shift on the end-of-shift summary |
+| Enter (title screen) | Clock In: pick a tech (once there's more than one, or pay to hire one), then a map. Arrows or 1-9 to choose, Enter for next, Esc to go back |
+| S / C / A / O (title screen) | Overtime Shop / Characters / Achievements / Settings |
+| Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts and Q quits to the title from the pause menu (press twice) |
+| Enter / C / S / Esc | End-of-shift summary: Next Shift / Change Tech or Map / Overtime Shop / Title |
+| R (level-up cards) | Reroll the cards (needs the shop's Escalation Path) |
 | M | Mute / unmute (sound starts after your first key press or tap) |
 | F | FPS counter on/off |
 | O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, sound and music volume, screen shake, damage numbers, vibration, camera tilt and distance, playtest helpers |
@@ -48,6 +51,7 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | K | Playtest: knock a quarter of its HP off the boss (to see its phases and the ending) |
 | 1–4 / tap | Pick a level-up card |
 | R | Playtest: start a new shift |
+| G | Playtest: +$1,000 Overtime Pay (works on the menus too). Settings also has Wipe the save |
 
 ## Project layout
 
@@ -58,14 +62,16 @@ src/engine/    fixed-timestep loop, input, object pool, spatial hash, synthesize
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
                projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
                (upgrades.js), CSAT score (score.js), floor zones such as paper jams (zones.js), boss
-               attacks (hazards.js), spawner and wave timeline, floor layout and collision. No
-               Three.js, no DOM
+               attacks (hazards.js), spawner and wave timeline, floor layout and collision, the
+               save with Overtime Pay, the shop and unlocks (meta.js), achievements, tech perks
+               (perks.js), the shift timeline and the performance review. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
                tool effects, pickups, floor zones (zones.js), bosses and their floor telegraphs (bosses.js), boss
                bullets and meeting bombs (hazards.js), particles (fx.js), models.js (every shape
                lives here)
 src/ui/        HTML/CSS overlays: HUD (hud.js), floating numbers and words (floaters.js, a 2D
-               canvas), level-up cards and chests, pause menu, end-of-shift summary, settings,
+               canvas), the title and menus between shifts (menus.js), level-up cards and chests,
+               pause menu, end-of-shift summary with its timeline chart, settings,
                FPS counter, touch stick (icons.js is the original's pixel icons)
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```

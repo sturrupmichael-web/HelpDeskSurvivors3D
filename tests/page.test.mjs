@@ -9,6 +9,15 @@ export const tests = [
     await page.waitForTimeout(500);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['opens on the title, and Enter clocks in', async (page) => {
+    await page.waitForSelector('.panel.title', { timeout: 10000 });
+    assert(await page.evaluate(() => sim.menu && sim.frozen), 'the floor runs behind the title');
+    assert(await page.evaluate(() => document.querySelector('.hud').hidden), 'the HUD shows on the title');
+    // A fresh save has one tech and one map: straight to work.
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.menu && document.querySelector('.menus').hidden);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
   ['draws the scene', async (page) => {
     const info = await page.evaluate(() => view.renderer.info.render);
     assert(info.calls > 3 && info.triangles > 1000, `only ${info.calls} draw calls, ${info.triangles} triangles`);
@@ -155,6 +164,34 @@ export const tests = [
     await page.waitForTimeout(700);
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => !sim.over && sim.time < 2 && document.querySelector('.hud-boss').hidden);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['the summary goes to the shop, which spends Overtime Pay, and back through Clock In', async (page) => {
+    await page.waitForFunction(() => [...document.querySelectorAll('.screen')].every((el) => el.hidden));
+    await page.evaluate(() => {
+      sim.player.god = false;
+      sim.player.warranty = 0;
+      sim.player.hp = -1;
+    });
+    await page.waitForSelector('.summary .paid', { timeout: 10000 });
+    await page.waitForTimeout(700);
+    await page.keyboard.press('KeyS');
+    await page.waitForSelector('.shop-list', { timeout: 5000 });
+    await page.keyboard.press('KeyG'); // playtest: +$1,000
+    const pay = await page.evaluate(() => sim.meta.data.pay);
+    await page.keyboard.press('Digit1'); // Ergonomic Chair
+    await page.waitForFunction((p) => sim.meta.data.pay < p && sim.meta.level('chair') === 1, pay);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.panel.title', { timeout: 5000 });
+    // With pay to hire someone, Clock In asks for a tech.
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.setup', { timeout: 5000 });
+    await page.keyboard.press('Digit2'); // hire Desktop Support ($300)
+    await page.waitForFunction(() => sim.meta.isUnlocked('desktop'));
+    await page.keyboard.press('Enter'); // on to the map
+    await page.keyboard.press('Enter'); // Clock In
+    await page.waitForFunction(() => !sim.menu && sim.charId === 'desktop' && view.techId === 'desktop');
+    assert((await page.evaluate(() => sim.player.maxHp)) === 100, 'the chair did not add sanity'); // 90 + 10
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
   ['M mutes the sound and the HUD says so', async (page) => {

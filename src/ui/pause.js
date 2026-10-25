@@ -1,19 +1,20 @@
 // The pause menu ("ON HOLD"): Esc, P, gamepad Start or the II button. Also opens by itself
-// when the tab is hidden. Ported from the original's src/ui/screens/pause.js; Restart
-// throws the shift away, so it needs a second press. Not yet ported: Shift Stats, Report a
-// Bug and Quit to Title.
+// when the tab is hidden. Ported from the original's src/ui/screens/pause.js; Restart and
+// Quit to Title throw the shift (and its pay) away, so they need a second press. Not yet
+// ported: Shift Stats and Report a Bug.
 
 import { PAUSE_LINES } from '../../data/flavor.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
-const RESTART = 'Restart Shift <kbd>R</kbd>';
+const LABELS = { restart: 'Restart Shift <kbd>R</kbd>', quit: 'Quit to Title <kbd>Q</kbd>' };
 
 export class PauseScreen {
-  // `onResume()`, `onRestart()`, `onSettings()` and `onMute()` go back to the page;
-  // `muted()` says whether sound is off.
-  constructor(root, { onResume, onRestart, onSettings, onMute, muted }) {
+  // `onResume()`, `onRestart()`, `onQuit()`, `onSettings()` and `onMute()` go back to the
+  // page; `muted()` says whether sound is off.
+  constructor(root, { onResume, onRestart, onQuit, onSettings, onMute, muted }) {
     this.onResume = onResume;
     this.onRestart = onRestart;
+    this.onQuit = onQuit;
     this.onSettings = onSettings;
     this.onMute = onMute;
     this.muted = muted;
@@ -25,7 +26,7 @@ export class PauseScreen {
       const b = e.target.closest('button');
       if (b) this.act(b.dataset.act);
     });
-    this.armed = false;
+    this.armed = null; // the button waiting for its second press
     this.disarm = 0;
   }
 
@@ -41,7 +42,7 @@ export class PauseScreen {
   }
 
   show() {
-    this.armed = false;
+    this.armed = null;
     clearTimeout(this.disarm);
     this.el.innerHTML = `
       <div class="panel pause-panel">
@@ -50,7 +51,10 @@ export class PauseScreen {
         <button class="primary" data-act="resume">Resume <kbd>Esc</kbd></button>
         <button data-act="settings">Settings <kbd>O</kbd></button>
         <button data-act="mute">${this.soundLabel()}</button>
-        <div class="pause-danger"><button class="confirm" data-act="restart">${RESTART}</button></div>
+        <div class="pause-danger">
+          <button class="confirm" data-act="restart">${LABELS.restart}</button>
+          <button class="confirm" data-act="quit">${LABELS.quit}</button>
+        </div>
       </div>`;
     this.el.hidden = false;
   }
@@ -59,24 +63,31 @@ export class PauseScreen {
     if (act === 'resume') this.onResume();
     else if (act === 'settings') this.onSettings();
     else if (act === 'mute') this.onMute();
-    else if (act === 'restart') {
-      const b = this.el.querySelector('.confirm');
-      if (!this.armed) {
+    else if (act === 'restart' || act === 'quit') {
+      if (this.armed !== act) {
         // First press: ask again, and forget it after 3 seconds.
-        this.armed = true;
+        this.reset();
+        this.armed = act;
+        const b = this.el.querySelector(`[data-act=${act}]`);
         b.classList.add('armed');
-        b.innerHTML = `Restart? This shift is lost. ${matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Press'} again to confirm <kbd>R</kbd>`;
-        clearTimeout(this.disarm);
-        this.disarm = setTimeout(() => {
-          this.armed = false;
-          b.classList.remove('armed');
-          b.innerHTML = RESTART;
-        }, 3000);
+        b.innerHTML = `${act === 'restart' ? 'Restart' : 'Quit'}? This shift's pay is lost. ${matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Press'} again to confirm <kbd>${act === 'restart' ? 'R' : 'Q'}</kbd>`;
+        this.disarm = setTimeout(() => this.reset(), 3000);
         return;
       }
-      clearTimeout(this.disarm);
-      this.onRestart();
+      this.reset();
+      if (act === 'restart') this.onRestart();
+      else this.onQuit();
     }
+  }
+
+  // Puts an armed Restart or Quit button back the way it was.
+  reset() {
+    clearTimeout(this.disarm);
+    if (!this.armed) return;
+    const b = this.el.querySelector(`[data-act=${this.armed}]`);
+    b?.classList.remove('armed');
+    if (b) b.innerHTML = LABELS[this.armed];
+    this.armed = null;
   }
 
   soundLabel() {
@@ -95,6 +106,7 @@ export class PauseScreen {
     if (!this.open) return false;
     if (code === 'Escape' || code === 'KeyP' || code === 'PadStart' || code === 'PadB') this.act('resume');
     else if (code === 'KeyR') this.act('restart');
+    else if (code === 'KeyQ') this.act('quit');
     else if (code === 'KeyO' || code === 'KeyM') return false;
     return true;
   }
