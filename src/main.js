@@ -12,20 +12,33 @@ import { Hud } from './ui/hud.js';
 import { LevelUpScreen } from './ui/levelUp.js';
 import { PauseScreen } from './ui/pause.js';
 import { GameOverScreen } from './ui/gameOver.js';
+import { Floaters } from './ui/floaters.js';
+import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusic, stopMusic, duckMusic } from './engine/audio.js';
+import { setHaptics } from './engine/haptics.js';
 import { VERSION } from './version.js';
 
 const canvas = document.getElementById('game');
 const ui = document.getElementById('ui');
 initInput(canvas);
+// Browsers only allow sound after a key press or a tap.
+addEventListener('keydown', initAudio);
+addEventListener('pointerdown', initAudio);
+addEventListener('contextmenu', (e) => e.preventDefault()); // a long press shouldn't open a menu
 
 const settings = loadSettings();
 let view = null;
+const floaters = new Floaters(ui); // under the HUD
 const hud = new Hud(ui, () => sim.pause());
+hud.setMuted(isMuted());
 const banner = { show: (title, text, seconds) => hud.banner(title, text, seconds) };
 const sim = new Sim({
   banner: banner.show,
   shake: (amount) => view?.rig.shake(amount),
   ring: (x, y, r, color, life, fill) => view?.weapons.ring(x, y, r, color, life, fill),
+  sfx,
+  burst: (x, y, colors, n) => view?.fx.burst(x, y, colors, n),
+  number: (x, y, amount) => floaters.number(x, y, amount),
+  text: (x, y, words, color) => floaters.text(x, y, words, color),
 });
 // Antialiasing is fixed when the renderer is made: off on phones, where it costs most.
 view = new View(canvas, sim, { antialias: !isTouchDevice() });
@@ -41,6 +54,8 @@ const pause = new PauseScreen(ui, {
   onResume: () => sim.resume(),
   onRestart: () => newShift(),
   onSettings: () => panel.toggle(true),
+  onMute: () => mute(),
+  muted: isMuted,
 });
 const gameOver = new GameOverScreen(ui, () => newShift());
 // The gear and Settings panel go on top of the screens.
@@ -49,6 +64,13 @@ ui.append(panel.button, panel.panel);
 function newShift() {
   sim.newRun();
   view.resetCamera();
+  view.fx.clear();
+  floaters.clear();
+}
+
+function mute() {
+  hud.setMuted(toggleMute());
+  pause.refresh();
 }
 
 function apply(s) {
@@ -57,6 +79,9 @@ function apply(s) {
   view.rig.shakeEnabled = s.shake;
   fps.visible = s.fps;
   stick.enabled = s.stick;
+  floaters.showNumbers = s.numbers;
+  setVolumes(s.sfx, s.music);
+  setHaptics(s.vibration);
 }
 apply(settings);
 
@@ -102,7 +127,8 @@ onKeyPress((code) => {
     return;
   }
   if (gameOver.key(code) || levelUp.key(code) || pause.key(code)) return;
-  if (code === 'KeyO') panel.toggle(true);
+  if (code === 'KeyM') mute();
+  else if (code === 'KeyO') panel.toggle(true);
   else if (sim.over || sim.waiting) return;
   else if (code === 'Escape' || code === 'KeyP' || code === 'PadStart') sim.pause();
   else if (PLAYTEST_KEYS[code]) playtest(PLAYTEST_KEYS[code]);
@@ -120,12 +146,26 @@ startLoop(
     view.render(dt, alpha);
     stick.update();
     hud.update(dt, sim, view);
+    floaters.update(dt, view, sim.frozen);
+    music();
+    setListener(sim.player.x);
     levelUp.update(sim);
     pause.update(sim);
     gameOver.update(sim);
     fps.frame(dt, view.renderer.info);
   },
 );
+
+// Music plays during a shift, quieter while paused, and stops on the summary.
+let musicState = '';
+function music() {
+  const want = sim.over ? 'off' : sim.paused ? 'ducked' : 'on';
+  if (want === musicState) return;
+  if (want === 'off') stopMusic();
+  else if (musicState === 'off' || musicState === '') startMusic();
+  duckMusic(want === 'ducked');
+  musicState = want;
+}
 
 // Handy in the browser console.
 window.sim = sim;

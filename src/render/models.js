@@ -23,6 +23,19 @@ toonSteps.minFilter = toonSteps.magFilter = THREE.NearestFilter;
 toonSteps.needsUpdate = true;
 export const toonMaterial = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonSteps });
 
+// Users flash white when hit. Each instance gets an `aFlash` value (0..1) that mixes its
+// color toward white, set by the renderer from the simulation's `flash` timer.
+export const flashToonMaterial = toonMaterial.clone();
+flashToonMaterial.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float aFlash;\nvarying float vFlash;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlash = aFlash;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vFlash;')
+    .replace('#include <dithering_fragment>', '#include <dithering_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0), vFlash);');
+};
+flashToonMaterial.customProgramCacheKey = () => 'flash';
+
 // ...and outlined, like the original sprites: an "inverted hull", the same geometry drawn
 // again in dark ink with its back faces only, pushed out along the normals. Works with
 // instancing too (the instance matrix is applied after the push).
@@ -128,12 +141,14 @@ function head(parts, skin, hair, hairStyle) {
 // Tier 1 Tech from the original sprite: brown hair, grey headset with a boom mic, blue
 // polo, yellow lanyard and white badge, navy trousers, black shoes.
 // Returns { root, legL, legR, armL, armR, body } so the renderer can animate the limbs.
+// The tech has a material of their own, so they can flash when hurt (its emissive color).
 export function createTechModel() {
+  const material = toonMaterial.clone();
   const root = new THREE.Group();
   const body = new THREE.Group(); // bobs while walking
   root.add(body);
   const mesh = (geo) => {
-    const m = new THREE.Mesh(geo, toonMaterial);
+    const m = new THREE.Mesh(geo, material);
     m.castShadow = true;
     return outlined(m);
   };
@@ -183,7 +198,7 @@ export function createTechModel() {
     sphere(0.035, P.k, -0.16, HEAD_Y - 0.13, 0.31),
   );
   body.add(mesh(merge(parts)));
-  return { root, body, legL, legR, armL, armR };
+  return { root, body, legL, legR, armL, armR, material };
 }
 
 // --- End-users ----------------------------------------------------------------------

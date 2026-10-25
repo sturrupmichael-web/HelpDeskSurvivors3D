@@ -93,7 +93,7 @@ export class GameOverScreen {
   // except F and O, which the page handles).
   key(code) {
     if (!this.open) return false;
-    if (code === 'KeyF' || code === 'KeyO') return false;
+    if (code === 'KeyF' || code === 'KeyO' || code === 'KeyM') return false;
     if (code === 'Enter' || code === 'Space' || code === 'PadA' || code === 'PadStart') this.again();
     return true;
   }

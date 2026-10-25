@@ -97,6 +97,7 @@ export class Sim {
     this.ticks = 0;
     this.score.reset();
     this.paused = false;
+    this.beatT = 0;
     this.over = null; // the run's stats once the tech burns out
     this.choices = null; // level-up cards waiting for a pick
     this.chest = null; // what the last Change Approved chest gave, until it's dismissed
@@ -160,6 +161,11 @@ export class Sim {
     if (comeback) this.revive(comeback);
     else if (p.hp > 0 && p.pendingLevels > 0 && !this.chest) this.openLevelUp();
     this.score.update(dt);
+    // Low sanity: you can hear your pulse.
+    if (p.hp > 0 && p.hp < p.maxHp * 0.25 && (this.beatT -= dt) <= 0) {
+      this.beatT = 0.9;
+      this.sfx('heartbeat');
+    }
     if (p.hp <= 0) this.endRun(false);
   }
 
@@ -187,6 +193,7 @@ export class Sim {
     this.chest = null;
     this.paused = false;
     this.sfx(won ? 'victory' : 'burnout');
+    this.shake(won ? 4 : 8);
     this.over = {
       won,
       character: p.def.name,

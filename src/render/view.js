@@ -8,6 +8,7 @@ import { createTechModel, blobShadowGeometry, outlineMaterial, px } from './mode
 import { EnemyView } from './enemies.js';
 import { WeaponView } from './weapons.js';
 import { PickupView } from './pickups.js';
+import { FxView } from './fx.js';
 import { FOOT } from '../sim/player.js';
 
 const BACKGROUND = '#1a1c2c'; // the original's near-black navy
@@ -54,6 +55,7 @@ export class View {
 
     this.tech = createTechModel();
     this.scene.add(this.tech.root);
+    this.fall = 0; // 0 standing .. 1 flat on the floor after a burnout
     // Blob shadow under the tech, shown when real shadows are off.
     this.blob = new THREE.Mesh(
       blobShadowGeometry(0.42),
@@ -77,6 +79,7 @@ export class View {
     this.enemies = new EnemyView(this.scene, sim.enemies.capacity);
     this.weapons = new WeaponView(this.scene);
     this.pickups = new PickupView(this.scene);
+    this.fx = new FxView(this.scene);
     this.techYaw = 0;
     this.walkPhase = 0;
 
@@ -148,6 +151,7 @@ export class View {
     this.enemies.update(this.sim, alpha, this.rig.footprint);
     this.weapons.update(this.sim, alpha, dt, x, z);
     this.pickups.update(this.sim, alpha, this.rig.footprint);
+    this.fx.update(dt, this.sim.frozen);
 
     // The sun's shadow box follows the camera, snapped to its texel grid so edges don't crawl.
     const step = (SHADOW_SPAN * 2) / this.sun.shadow.mapSize.x;
@@ -168,6 +172,14 @@ export class View {
     d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
     this.techYaw += d * Math.min(1, TURN_RATE * dt);
     t.root.rotation.y = this.techYaw;
+    // Burned out: keel over toward the camera.
+    this.fall = this.sim.over && !this.sim.over.won ? Math.min(1, this.fall + dt * 2.5) : 0;
+    t.root.rotation.x = (this.fall * this.fall * Math.PI) / 2.1;
+    // Hurt: a white flash. PTO and comebacks (no damage): a soft golden pulse.
+    const e = t.material.emissive;
+    if (p.flash > 0) e.setRGB(0.9, 0.9, 0.9);
+    else if (p.invuln > 0 && !this.sim.frozen) e.setRGB(0.35, 0.25, 0.05).multiplyScalar(0.6 + 0.4 * Math.sin(performance.now() / 90));
+    else e.setRGB(0, 0, 0);
     // Walk cycle: legs and arms swing in opposition, a small bob, and settle when standing.
     const speed = Math.hypot(p.vx, p.vy) / p.def.speed;
     if (p.moving) this.walkPhase += dt * 10 * Math.max(0.6, speed);

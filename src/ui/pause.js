@@ -1,7 +1,7 @@
 // The pause menu ("ON HOLD"): Esc, P, gamepad Start or the II button. Also opens by itself
 // when the tab is hidden. Ported from the original's src/ui/screens/pause.js; Restart
 // throws the shift away, so it needs a second press. Not yet ported: Shift Stats, Report a
-// Bug, Sound (milestone 6) and Quit to Title.
+// Bug and Quit to Title.
 
 import { PAUSE_LINES } from '../../data/flavor.js';
 
@@ -9,11 +9,14 @@ const pickLine = (list) => list[(Math.random() * list.length) | 0];
 const RESTART = 'Restart Shift <kbd>R</kbd>';
 
 export class PauseScreen {
-  // `onResume()`, `onRestart()` and `onSettings()` go back to the page.
-  constructor(root, { onResume, onRestart, onSettings }) {
+  // `onResume()`, `onRestart()`, `onSettings()` and `onMute()` go back to the page;
+  // `muted()` says whether sound is off.
+  constructor(root, { onResume, onRestart, onSettings, onMute, muted }) {
     this.onResume = onResume;
     this.onRestart = onRestart;
     this.onSettings = onSettings;
+    this.onMute = onMute;
+    this.muted = muted;
     this.el = document.createElement('div');
     this.el.className = 'screen';
     this.el.hidden = true;
@@ -46,6 +49,7 @@ export class PauseScreen {
         <p class="sub">${pickLine(PAUSE_LINES)}</p>
         <button class="primary" data-act="resume">Resume <kbd>Esc</kbd></button>
         <button data-act="settings">Settings <kbd>O</kbd></button>
+        <button data-act="mute">${this.soundLabel()}</button>
         <div class="pause-danger"><button class="confirm" data-act="restart">${RESTART}</button></div>
       </div>`;
     this.el.hidden = false;
@@ -54,6 +58,7 @@ export class PauseScreen {
   act(act) {
     if (act === 'resume') this.onResume();
     else if (act === 'settings') this.onSettings();
+    else if (act === 'mute') this.onMute();
     else if (act === 'restart') {
       const b = this.el.querySelector('.confirm');
       if (!this.armed) {
@@ -74,13 +79,23 @@ export class PauseScreen {
     }
   }
 
+  soundLabel() {
+    return `Sound: ${this.muted() ? 'Off' : 'On'} <kbd>M</kbd>`;
+  }
+
+  // Keeps the Sound button in step when M is pressed.
+  refresh() {
+    const b = this.el.querySelector('[data-act=mute]');
+    if (b) b.innerHTML = this.soundLabel();
+  }
+
   // Keyboard and gamepad. Returns true if it used the key (it takes them all while open,
   // except O, which the page handles so Settings opens over the menu).
   key(code) {
     if (!this.open) return false;
     if (code === 'Escape' || code === 'KeyP' || code === 'PadStart' || code === 'PadB') this.act('resume');
     else if (code === 'KeyR') this.act('restart');
-    else if (code === 'KeyO') return false;
+    else if (code === 'KeyO' || code === 'KeyM') return false;
     return true;
   }
 }
