@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { LEADERBOARD } from './data/leaderboard.js';
 
 // Version = time of the last commit in UTC, e.g. 2026.10.25-0412, so the same code always
 // gets the same version. Falls back to the build time when git isn't available.
@@ -32,7 +33,8 @@ writeFileSync('index.html', withCsp(html));
 console.log(`index.html: ${(html.length / 1024).toFixed(0)} KB, version ${VERSION}`);
 
 // Content Security Policy: the page may only run its own (inline, hashed) scripts and
-// talks to nobody. blob: and data: images are for canvas textures.
+// talks only to the leaderboard's Supabase project (scores, accounts and cloud saves).
+// blob: and data: images are for canvas textures.
 function withCsp(page) {
   const hashes = [...page.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
     (m) => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`,
@@ -42,7 +44,7 @@ function withCsp(page) {
     `script-src 'self' ${hashes.join(' ')}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
-    "connect-src 'self'",
+    `connect-src 'self' ${LEADERBOARD.url}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

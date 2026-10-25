@@ -1,12 +1,12 @@
 // The menus between shifts: the title screen, the Clock In picker (pick a tech, then a
 // map with the Hardcore switch under it, then Shift Policies), the training offer,
-// Characters, the Overtime Shop and Achievements. One overlay; each screen renders into it
+// Characters, the Overtime Shop, Achievements, and the online screens (the leaderboard,
+// Account and profiles, in src/ui/online.js). One overlay; each screen renders into it
 // and handles its own keys.
 // Ported from the original's src/ui/screens/ (title.js, shiftSetup.js, policies.js,
 // training.js, characters.js, shop.js, achievements.js): the same wording, cards and keys.
 // The tech pictures are renders of the 3D models (`portrait`) where the original drew
-// sprites. Not yet ported: the leaderboard and account (M13), the Knowledge Base, what's
-// new and Report a Bug.
+// sprites. Not yet ported: the Knowledge Base, what's new and Report a Bug.
 
 import { icon } from './icons.js';
 import { fmtTime } from './hud.js';
@@ -19,6 +19,7 @@ import { TITLE_TAGLINES } from '../../data/flavor.js';
 import { VERSION } from '../version.js';
 import { POLICIES, POLICY_ORDER, POLICY_GROUPS, POLICY_RULES, HARDCORE } from '../../data/policies.js';
 import { shiftMult, fmtMult, clashes, rollReorg, hardcoreOk } from '../sim/policies.js';
+import { leaderboard, profile, accountScreen, conflictScreen, accountKind } from './online.js';
 
 const pickLine = (list) => list[(Math.random() * list.length) | 0];
 export const PAY = (n) => `<span class="pay">$${n.toLocaleString()}</span>`;
@@ -28,9 +29,12 @@ export class Menus {
   // `sim` for the save (sim.meta) and achievements; `portrait(techId)` gives a picture URL;
   // `onStart()` starts a shift with the saved picks; `onTraining()` starts the training
   // shift; `onPreview(tech, map)` shows a tech on a map's floor behind the menu (the saved
-  // picks by default); `onSettings()` opens Settings; `sfx`.
-  constructor(root, { sim, portrait, onStart, onTraining, onPreview, onSettings, sfx }) {
+  // picks by default); `onSettings()` opens Settings; `sfx`; `cloud` is the CloudSave
+  // (src/net/cloudsave.js), for the Account screen.
+  constructor(root, { sim, portrait, onStart, onTraining, onPreview, onSettings, sfx, cloud }) {
     this.sim = sim;
+    this.cloud = cloud;
+    this.pendingConflict = null; // the cloud save's "which progress?" question, for the next title
     this.portrait = portrait;
     this.onStart = onStart;
     this.onTraining = onTraining;
@@ -93,6 +97,8 @@ export class Menus {
 
   // --- Title ------------------------------------------------------------------------------
   title() {
+    // Both this device and the account changed: ask before anything else.
+    if (this.pendingConflict) return this.pendingConflict();
     const m = this.meta.data;
     const ch = CHARACTERS[m.selected];
     const go = (act) => {
@@ -106,6 +112,8 @@ export class Menus {
       else if (act === 'shop') this.shop();
       else if (act === 'ach') this.achievements();
       else if (act === 'settings') this.onSettings();
+      else if (act === 'board') this.leaderboard();
+      else if (act === 'account') this.account();
     };
     const tile = (act, ic, label, extra, key) =>
       `<button class="tile" data-act="${act}">${icon(ic, 28)}<span>${label}</span>${extra ? `<small>${extra}</small>` : ''}<kbd>${key}</kbd></button>`;
@@ -125,6 +133,8 @@ export class Menus {
             ${tile('shop', 'laptop', 'Overtime Shop', PAY(m.pay), 'S')}
             ${tile('chars', 'delegate', 'Characters', `${hired}/${Object.keys(CHARACTERS).length} hired`, 'C')}
             ${tile('ach', 'cert', 'Achievements', `${Object.keys(m.achievements ?? {}).length}/${ACHIEVEMENTS.length}`, 'A')}
+            ${tile('board', 'escalate', 'Leaderboard', 'Top shifts per map', 'B')}
+            ${tile('account', 'lanyard', 'Account', accountKind(), 'U')}
             ${tile('settings', 'policy', 'Settings', 'Sound, quality, camera', 'O')}
             ${tile('training', 'book', 'Training', m.trained ? 'Done: take it again' : 'A guided first shift', 'T')}
           </div>
@@ -146,11 +156,35 @@ export class Menus {
         else if (code === 'KeyS') go('shop');
         else if (code === 'KeyA') go('ach');
         else if (code === 'KeyT') go('training');
+        else if (code === 'KeyB') go('board');
+        else if (code === 'KeyU') go('account');
         else return false; // O (Settings) is the page's
       },
       () => this.title(),
     );
     this.bind('button[data-act]', (i, el) => go(el.dataset.act));
+  }
+
+  // --- Online (src/ui/online.js) ---------------------------------------------------------
+  leaderboard(mapId) {
+    leaderboard(this, mapId);
+  }
+
+  account() {
+    accountScreen(this, this.cloud);
+  }
+
+  profile(name, back = () => this.title()) {
+    profile(this, name, back);
+  }
+
+  // The cloud save found progress on both sides: ask on the title, never mid-shift.
+  conflict(local, cloud, choose) {
+    this.pendingConflict = () => {
+      this.pendingConflict = null;
+      conflictScreen(this, local, cloud, choose);
+    };
+    if (this.el.querySelector('.panel.title')) this.title();
   }
 
   // --- Clock In ---------------------------------------------------------------------------

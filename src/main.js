@@ -20,6 +20,12 @@ import { initAudio, sfx, toggleMute, isMuted, setVolumes, setListener, startMusi
 import { setHaptics } from './engine/haptics.js';
 import { VERSION } from './version.js';
 import { MAPS, MAP_ORDER } from '../data/maps.js';
+import { account } from './net/account.js';
+import { CloudSave } from './net/cloudsave.js';
+
+// Coming back from Google sign-in: pick up the account before anything else.
+const signIn = await account.init().catch(() => null);
+if (signIn === 'redirect') await new Promise(() => {}); // off to Google again
 
 const canvas = document.getElementById('game');
 const ui = document.getElementById('ui');
@@ -55,6 +61,7 @@ const sim = new Sim({
   // How this player moves, for the training shift's first card.
   device: () => (gamepadConnected() ? 'pad' : touchState.used || matchMedia('(pointer: coarse)').matches ? 'touch' : 'keys'),
 }, meta);
+const cloud = new CloudSave(meta); // backs the save up to the player's account
 setMusicStyle(sim.map.music);
 // Antialiasing is fixed when the renderer is made: off on phones, where it costs most.
 view = new View(canvas, sim, { antialias: !isTouchDevice() });
@@ -81,7 +88,7 @@ const gameOver = new GameOverScreen(ui, (act) => {
   else if (act === 'switch') toMenu().setup('char');
   else if (act === 'shop') toMenu().shop();
   else toMenu().title();
-});
+}, meta);
 const menus = new Menus(ui, {
   sim,
   portrait: (id) => view.portrait(id),
@@ -90,7 +97,16 @@ const menus = new Menus(ui, {
   onPreview: (tech, map) => reset(tech, map),
   onSettings: () => panel.toggle(true),
   sfx,
+  cloud,
 });
+// Both this device and the account have progress: ask on the next title screen.
+cloud.onConflict = (local, theirs, choose) => menus.conflict(local, theirs, choose);
+// The account's progress replaced this device's: show it, if we're on the menus.
+cloud.onChange = () => {
+  if (!sim.menu) return;
+  reset();
+  menus.refresh();
+};
 // The gear and Settings panel go on top of the screens, and the toasts on top of those.
 ui.append(panel.button, panel.panel, hud.toasts);
 
@@ -146,6 +162,8 @@ apply(settings);
 // Playtest helpers, like the original's debug hotkeys (also buttons in Settings for phones).
 function playtest(act) {
   const p = sim.player;
+  // Shifts that used a helper stay off the leaderboard. Restart starts a clean one.
+  if (!sim.menu && act !== 'restart') sim.cheated = true;
   if (act === 'spawn50') sim.debugSpawn(50);
   else if (act === 'spawn300') sim.debugSpawn(300);
   else if (act === 'each') banner.show('ONE OF EACH', `${sim.debugSpawnEach()} kinds of user, in a ring round you.`, 2);
@@ -268,4 +286,7 @@ function music() {
 window.sim = sim;
 window.view = view;
 console.info('Helpdesk Survivors 3D version', VERSION);
+if (signIn === 'linked' || signIn === 'signed-in') hud.toast({ icon: 'key', label: 'SIGNED IN WITH GOOGLE', name: account.user.email || 'Your progress now follows you' });
+else if (signIn === 'error') hud.toast({ icon: 'key', label: "GOOGLE SIGN-IN DIDN'T FINISH", name: 'See the Account screen (U)' });
+cloud.sync();
 document.getElementById('boot')?.remove();

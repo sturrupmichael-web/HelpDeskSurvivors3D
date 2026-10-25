@@ -159,6 +159,7 @@ export class Sim {
     this.paused = false;
     this.beatT = 0;
     this.over = null; // the run's stats once the tech burns out
+    this.cheated = false; // a playtest helper was used this shift: no leaderboard (set by the page)
     this.choices = null; // level-up cards waiting for a pick
     this.chest = null; // what the last Change Approved chest gave, until it's dismissed
     this.autoPizza = false; // everything maxed: take the pizza without asking
@@ -337,6 +338,7 @@ export class Sim {
       hardcore: this.policy.hardcore,
       policyMult: this.policy.mult, // includes Hardcore's x2
       score: Math.round(this.score.csat * this.policy.mult), // what the leaderboard ranks
+      cheated: this.cheated,
       evolutions: this.achievements.run.evolutions,
       bestStreak: this.score.bestStreak,
       level: p.level,

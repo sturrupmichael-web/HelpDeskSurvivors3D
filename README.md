@@ -5,8 +5,9 @@ in Three.js: the same survivors-like about working the IT helpdesk, drawn in 3D 
 follow camera and low-poly models built from code. The game logic is ported from the original;
 the rendering, camera and floor visuals are new.
 
-Plain ES modules with one runtime dependency (Three.js). No backend: the published page is a
-single static `index.html`.
+Plain ES modules with one runtime dependency (Three.js). The published page is a single static
+`index.html`; the online leaderboard, accounts and cloud saves talk to the 2D game's Supabase
+project, with tables of the 3D game's own (`supabase/`).
 
 ## Run it
 
@@ -32,6 +33,8 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | H (map step) | Hardcore on/off (once you've won a shift on every map) |
 | R / N (Shift Policies step) | Reorg: two random bad policies for an extra +10% / no policies |
 | S / C / A / O / T (title screen) | Overtime Shop / Characters / Achievements / Settings / Training |
+| B / U (title screen) | Leaderboard (1-5 or arrows for the map, C no policies only, H Hardcore only; tap a player for their profile) / Account (name, Sign in with Google, cloud save) |
+| P (end-of-shift summary) | Post the shift to the leaderboard (the first time, type a name; a guest account is made for you). Shifts that used a playtest helper can't be posted |
 | Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts and Q quits to the title from the pause menu (press twice) |
 | Enter / C / S / Esc | End-of-shift summary: Next Shift / Change Tech or Map / Overtime Shop / Title |
 | R (level-up cards) | Reroll the cards (needs the shop's Escalation Path) |
@@ -74,10 +77,14 @@ src/render/    Three.js: view, follow camera, floor chunks, the instanced horde,
                tool effects, pickups, floor zones (zones.js), bosses and their floor telegraphs (bosses.js), boss
                bullets and meeting bombs (hazards.js), particles (fx.js), models.js (every shape
                lives here)
+src/net/       the online parts, ported from the original: accounts through Supabase Auth
+               (account.js), the leaderboard (leaderboard.js) and cloud saves (cloudsave.js)
 src/ui/        HTML/CSS overlays: HUD (hud.js), floating numbers and words (floaters.js, a 2D
                canvas), the title and menus between shifts (menus.js), level-up cards and chests,
-               pause menu, end-of-shift summary with its timeline chart, settings,
+               pause menu, end-of-shift summary with its timeline chart, the leaderboard,
+               Account and profiles (online.js), settings,
                FPS counter, touch stick (icons.js is the original's pixel icons)
+supabase/      the SQL for the 3D game's tables, and how to set them up (README.md there)
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```
 
@@ -112,7 +119,8 @@ Rules that keep this working:
 
 `npm test` runs every `tests/*.test.mjs`: simulation tests in Node, and page tests in headless
 Chromium against `dev.html` and, if built, `index.html`. First time: `npx playwright install chromium`.
-WebGL runs in software there, so it checks correctness, not speed.
+WebGL runs in software there, so it checks correctness, not speed. The online tests answer the
+game's requests with a pretend Supabase (`tests/fakeSupabase.mjs`); nothing reaches the real one.
 
 ## Deploy
 
