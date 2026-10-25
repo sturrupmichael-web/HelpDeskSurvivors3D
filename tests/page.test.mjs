@@ -95,6 +95,7 @@ export const tests = [
       while (sim.choices) sim.choose(sim.choices[0]);
       sim.chest = null;
       sim.player.god = false;
+      sim.player.warranty = 0; // a random card may have been Extended Warranty, which revives once
       sim.player.hp = -1;
     });
     await page.waitForSelector('.summary', { timeout: 5000 });

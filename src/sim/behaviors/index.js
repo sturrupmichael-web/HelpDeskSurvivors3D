@@ -6,5 +6,12 @@
 import chase from './chase.js';
 import dart from './dart.js';
 import line from './line.js';
+import summoner from './summoner.js';
+import dropper from './dropper.js';
+import teleport from './teleport.js';
+import aura from './aura.js';
+import pair from './pair.js';
+import tailgate from './tailgate.js';
+import still from './still.js';
 
-export const BEHAVIORS = { chase, dart, line };
+export const BEHAVIORS = { chase, dart, line, summoner, dropper, teleport, aura, pair, tailgate, still };

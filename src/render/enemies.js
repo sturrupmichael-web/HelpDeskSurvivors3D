@@ -1,5 +1,6 @@
 // Draws the horde: one InstancedMesh per kind of user (from models.js) and its outline,
-// plus one instanced blob shadow for everyone. Each frame writes matrices into preallocated
+// plus one instanced blob shadow for everyone, and the circles some users carry with them
+// (the VIP's aura, Badge Brenda's reader range). Each frame writes matrices into preallocated
 // buffers; nothing is created per user, so a thousand users cost a handful of draw calls.
 
 import * as THREE from 'three';
@@ -47,6 +48,22 @@ export class EnemyView {
     this.shadows.frustumCulled = false;
     this.shadows.renderOrder = -1;
     scene.add(this.shadows);
+    // Floor circles: a soft red disc and rim under each VIP (their aura speeds up users
+    // nearby), and a pulsing ring round Badge Brenda while she's slowing you.
+    const disc = new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2);
+    const rim = new THREE.RingGeometry(0.97, 1, 48).rotateX(-Math.PI / 2);
+    const circle = (geo, opacity) => {
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: '#b13e53', transparent: true, opacity, depthWrite: false }), 64);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = -1;
+      mesh.count = 0;
+      scene.add(mesh);
+      return mesh;
+    };
+    this.auraDisc = circle(disc, 0.12);
+    this.auraRim = circle(rim, 0.55);
+    this.badgeRing = circle(new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2), 0.6);
     this.missing = new Set(); // sprite ids with no model yet (warned once)
   }
 
@@ -54,6 +71,8 @@ export class EnemyView {
   update(sim, alpha, rect) {
     for (const mesh of this.kinds.values()) mesh.count = 0;
     let shadows = 0;
+    let auras = 0;
+    let badges = 0;
     const pool = sim.enemies;
     const x0 = rect.x0 - 64;
     const x1 = rect.x1 + 64;
@@ -87,6 +106,17 @@ export class EnemyView {
       mesh.setMatrixAt(mesh.count++, m);
       m.makeScale(s * (e.r / 7), 1, s * (e.r / 7)).setPosition(x, 0.012, z);
       this.shadows.setMatrixAt(shadows++, m);
+      const b = e.def.behavior;
+      if (b === 'aura' && auras < 64) {
+        const r = px(e.params.radius) * (1 + 0.04 * Math.sin(e.animT * 4));
+        m.makeScale(r, 1, r).setPosition(x, 0.014, z);
+        this.auraDisc.setMatrixAt(auras, m);
+        this.auraRim.setMatrixAt(auras++, m);
+      } else if (b === 'tailgate' && e.n && badges < 64) {
+        const r = px(e.params.radius);
+        m.makeScale(r, 1, r).setPosition(x, 0.016, z);
+        this.badgeRing.setMatrixAt(badges++, m);
+      }
     }
     for (const mesh of this.kinds.values()) {
       mesh.userData.ink.count = mesh.count;
@@ -96,5 +126,12 @@ export class EnemyView {
     }
     this.shadows.count = shadows;
     this.shadows.instanceMatrix.needsUpdate = true;
+    this.auraDisc.count = this.auraRim.count = auras;
+    this.badgeRing.count = badges;
+    if (auras) this.auraDisc.instanceMatrix.needsUpdate = this.auraRim.instanceMatrix.needsUpdate = true;
+    if (badges) {
+      this.badgeRing.instanceMatrix.needsUpdate = true;
+      this.badgeRing.material.opacity = 0.35 + 0.25 * Math.sin(performance.now() / 125);
+    }
   }
 }

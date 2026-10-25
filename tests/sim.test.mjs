@@ -7,6 +7,7 @@ import { assert } from './harness.mjs';
 import { WEAPONS } from '../data/weapons.js';
 import { createWeapon, weaponReady } from '../src/sim/weapons/index.js';
 import { spawnEnemy } from '../src/sim/enemies.js';
+import { ENEMIES } from '../data/enemies.js';
 
 const STEP = 1 / 60;
 const run = (sim, seconds, axis) => {
@@ -289,5 +290,50 @@ tests.push(
     sim.player.hp = 0;
     run(sim, STEP, still);
     assert(sim.over, 'came back twice');
+  }],
+);
+
+// The rest of the horde (M7).
+const countOf = (sim, id) => {
+  let n = 0;
+  for (let i = 0; i < sim.enemies.count; i++) if (!sim.enemies.items[i].dead && sim.enemies.items[i].def === ENEMIES[id]) n++;
+  return n;
+};
+tests.push(
+  ['a Phish Clicker releases Malware', () => {
+    const sim = arena(null, 0);
+    const p = sim.player;
+    spawnEnemy(sim, 'phish', p.x + 200, p.y);
+    run(sim, 6, still);
+    assert(countOf(sim, 'malware') >= 2, `${countOf(sim, 'malware')} malware`);
+  }],
+  ['a Printer Jammer drops paper jams that slow the tech', () => {
+    const sim = arena(null, 0);
+    const p = sim.player;
+    const e = spawnEnemy(sim, 'jammer', p.x + 300, p.y);
+    e.t0 = 0;
+    run(sim, STEP * 2, still);
+    assert(sim.zones.pool.count === 1, `${sim.zones.pool.count} zones`);
+    const z = sim.zones.pool.items[0];
+    p.x = z.x;
+    p.y = z.y - FOOT;
+    run(sim, STEP * 2, still);
+    assert(p.slow < 1, `slow ${p.slow}`);
+  }],
+  ['a VIP speeds up the users around them', () => {
+    const sim = arena(null, 0);
+    const p = sim.player;
+    const vip = spawnEnemy(sim, 'vip', p.x + 400, p.y);
+    const near = spawnEnemy(sim, 'pam', vip.x + 30, vip.y);
+    const far = spawnEnemy(sim, 'pam', p.x - 400, p.y);
+    run(sim, STEP, still);
+    assert(near.buff > 1 && far.buff === 1, `buffs ${near.buff} ${far.buff}`);
+  }],
+  ['Badge Brenda slows the tech while she is close', () => {
+    const sim = arena(null, 0);
+    const p = sim.player;
+    spawnEnemy(sim, 'brenda', p.x + 30, p.y);
+    run(sim, STEP * 2, still);
+    assert(p.slow < 1, `slow ${p.slow}`);
   }],
 );

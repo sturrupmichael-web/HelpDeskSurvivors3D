@@ -233,6 +233,22 @@ function person({ hair, skin = P.s, top, inner = null, tie = null, pants = P.n, 
 // The right arm held up and out, hand at about (0.5, 1.2): for waving something.
 const raisedArm = (top, skin) => [capsule(0.07, 0.3, top, 0.4, 0.96, 0.04, 0, -0.6), sphere(0.075, skin, 0.5, 1.17, 0.06)];
 
+function consultant(hair) {
+  const parts = person({ hair, top: P.G, pants: P.G, inner: P.w, tie: P.a });
+  parts.push(capsule(0.025, 0.32, P.y, -0.12, 0.8, 0.26, -0.15, 0.25)); // lanyard
+  parts.push(rotBox(0.4, 0.3, 0.03, P.k, -0.48, 0.62, 0.2, 0, 0.5)); // slide deck
+  parts.push(rotBox(0.34, 0.24, 0.035, P.w, -0.48, 0.62, 0.2, 0, 0.5));
+  parts.push(rotBox(0.2, 0.035, 0.04, P.e, -0.47, 0.6, 0.22, 0, 0.5, 0.6)); // the arrow going up
+  return merge(parts);
+}
+
+function dave(top) {
+  const parts = person({ hair: P.h, top, pants: P.k });
+  parts.push(rotBox(0.08, 0.1, 0.02, P.w, -0.1, 0.72, 0.27), rotBox(0.08, 0.1, 0.02, P.w, 0.1, 0.72, 0.27)); // two badges
+  parts.push(rotBox(0.06, 0.03, 0.025, P.y, -0.1, 0.69, 0.28), rotBox(0.06, 0.03, 0.025, P.a, 0.1, 0.69, 0.28));
+  return parts;
+}
+
 // One builder per user sprite id (data/enemies.js `sprite`). Each returns merged geometry.
 export const USER_MODELS = {
   // Password Reset Pam: purple cardigan over a white blouse, grey skirt, brown bob, waving
@@ -272,6 +288,113 @@ export const USER_MODELS = {
     g.scale(0.6, 0.6, 0.6);
     return g;
   },
+  // Phish Clicker: red hoodie, a fishing rod held up with a little envelope on the hook.
+  phish: () => {
+    const parts = person({ hair: P.h, top: P.r, raised: true });
+    parts.push(...raisedArm(P.r, P.s));
+    parts.push(capsule(0.025, 0.9, P.h, 0.72, 1.55, 0.22, 0.5, -0.55)); // rod, up and forward
+    parts.push(cyl(0.008, 0.008, 0.62, P.g, 0.96, 1.3, 0.6, 4)); // line
+    parts.push(rotBox(0.26, 0.17, 0.04, P.w, 0.96, 1.22, 0.6)); // bait envelope
+    parts.push(rotBox(0.18, 0.03, 0.02, P.k, 0.91, 1.26, 0.63, 0, 0, -0.5));
+    parts.push(rotBox(0.18, 0.03, 0.02, P.k, 1.01, 1.26, 0.63, 0, 0, 0.5));
+    return merge(parts);
+  },
+  // Malware: the Phish Clicker's little red bug, with white eyes and purple spots.
+  malware: () => {
+    const parts = [
+      sphere(0.26, P.r, 0, 0.24, 0, 1, 0.75, 1.15, 9, 6), // body
+      sphere(0.06, P.w, -0.1, 0.32, 0.25), // eyes
+      sphere(0.06, P.w, 0.1, 0.32, 0.25),
+      sphere(0.025, P.k, -0.1, 0.33, 0.3),
+      sphere(0.025, P.k, 0.1, 0.33, 0.3),
+      sphere(0.05, P.p, -0.12, 0.38, -0.08),
+      sphere(0.05, P.p, 0.12, 0.38, -0.08),
+      capsule(0.015, 0.2, P.k, -0.08, 0.5, 0.18, 0.5, 0.4), // antennae
+      capsule(0.015, 0.2, P.k, 0.08, 0.5, 0.18, 0.5, -0.4),
+    ];
+    for (const z of [-0.14, 0, 0.14]) {
+      parts.push(capsule(0.025, 0.14, P.k, -0.27, 0.08, z, 0, 1.0)); // legs
+      parts.push(capsule(0.025, 0.14, P.k, 0.27, 0.08, z, 0, -1.0));
+    }
+    return merge(parts);
+  },
+  // Printer Jammer: grey shirt, an armful of crumpled printouts held in front.
+  jammer: () => {
+    const parts = person({ hair: P.h, top: P.G, pants: P.k });
+    parts.push(box(0.64, 0.32, 0.3, P.w, 0, 0.5, 0.3)); // the pile
+    for (let i = 0; i < 4; i++) parts.push(box(0.5, 0.012, 0.31, P.g, 0, 0.56 + i * 0.065, 0.3));
+    parts.push(sphere(0.1, P.w, -0.22, 0.86, 0.32, 1, 0.8, 1, 5, 4)); // crumpled sheets on top
+    parts.push(sphere(0.09, P.w, 0.05, 0.88, 0.26, 1, 0.8, 1, 5, 4));
+    parts.push(rotBox(0.18, 0.02, 0.24, P.w, 0.3, 0.84, 0.34, 0.3, 0, -0.5)); // a sheet sticking out
+    parts.push(sphere(0.075, P.s, -0.3, 0.68, 0.36), sphere(0.075, P.s, 0.3, 0.68, 0.36)); // hands round the pile
+    return merge(parts);
+  },
+  // Shadow IT Steve: dark hoodie with the hood up, sunglasses, carrying his own router.
+  steve: () => {
+    const parts = person({ hair: P.n, top: P.n, pants: P.k, hairStyle: 'bob' }); // the bob is his hood
+    parts.push(rotBox(0.36, 0.08, 0.06, P.k, 0, HEAD_Y + 0.03, HEAD_R * 0.92)); // sunglasses
+    parts.push(box(0.3, 0.09, 0.2, P.k, 0.46, 0.42, 0.12)); // router in his hand
+    parts.push(box(0.26, 0.012, 0.16, P.G, 0.46, 0.51, 0.12));
+    parts.push(sphere(0.02, P.e, 0.38, 0.47, 0.22), sphere(0.02, P.B, 0.44, 0.47, 0.22));
+    parts.push(cyl(0.012, 0.012, 0.26, P.k, 0.36, 0.51, 0.06, 4), cyl(0.012, 0.012, 0.26, P.k, 0.56, 0.51, 0.06, 4)); // antennas
+    return merge(parts);
+  },
+  // The VIP: navy suit, white collar, red tie, phone pressed to the ear.
+  vip: () => {
+    const parts = person({ hair: P.G, skin: P.S, top: P.n, inner: P.w, tie: P.r, raised: true });
+    parts.push(capsule(0.07, 0.26, P.n, 0.38, 0.98, 0.06, -0.3, -0.35)); // arm up to the ear
+    parts.push(sphere(0.075, P.S, 0.38, 1.18, 0.1));
+    parts.push(rotBox(0.07, 0.24, 0.12, P.k, 0.35, 1.25, 0.05)); // phone
+    return merge(parts);
+  },
+  // Ticket-less Walk-Up: red hair, blue shirt, rushing in with a smoking laptop.
+  walkup: () => {
+    const parts = person({ hair: P.r, top: P.B });
+    parts.push(box(0.5, 0.03, 0.34, P.g, 0, 0.58, 0.36)); // laptop base
+    parts.push(rotBox(0.5, 0.34, 0.03, P.k, 0, 0.76, 0.2, -0.25)); // lid
+    parts.push(rotBox(0.42, 0.26, 0.02, P.n, 0, 0.76, 0.215, -0.25)); // screen
+    parts.push(rotBox(0.16, 0.03, 0.02, P.r, 0, 0.76, 0.23, -0.25, 0, 0.8)); // the error X
+    parts.push(rotBox(0.16, 0.03, 0.02, P.r, 0, 0.76, 0.23, -0.25, 0, -0.8));
+    parts.push(sphere(0.075, P.s, -0.26, 0.6, 0.4), sphere(0.075, P.s, 0.26, 0.6, 0.4));
+    parts.push(sphere(0.08, P.g, 0.12, 1.02, 0.26, 1, 1, 1, 5, 4)); // smoke
+    parts.push(sphere(0.1, P.g, 0.2, 1.2, 0.22, 1, 1, 1, 5, 4));
+    parts.push(sphere(0.07, P.w, 0.14, 1.38, 0.2, 1, 1, 1, 5, 4));
+    return merge(parts);
+  },
+  // Synergy Consultants (Merger Day): grey suits, navy ties, the new parent company's gold
+  // lanyard, and a slide deck with an arrow going up. The second one has red hair.
+  consultant: () => consultant(P.h),
+  consultant_b: () => consultant(P.r),
+  // Duplicate Dave: blue shirt, one old badge and one new one. Dave (2) wears the copy's
+  // orange and has a "2" tag over his head.
+  dave: () => merge(dave(P.b)),
+  dave2: () => {
+    const parts = dave(P.o);
+    parts.push(rotBox(0.26, 0.32, 0.04, P.k, 0.42, 1.78, 0)); // the (2) tag
+    parts.push(rotBox(0.2, 0.26, 0.05, P.w, 0.42, 1.78, 0));
+    for (const [w, h, x, y] of [[0.12, 0.035, 0.42, 1.88], [0.035, 0.07, 0.465, 1.83], [0.12, 0.035, 0.42, 1.78], [0.035, 0.07, 0.375, 1.73], [0.12, 0.035, 0.42, 1.68]]) {
+      parts.push(rotBox(w, h, 0.06, P.k, x, y, 0));
+    }
+    return merge(parts);
+  },
+  // Badge Brenda (Merger Day): navy new-hire top, holding up a badge that doesn't open anything.
+  brenda: () => {
+    const parts = person({ hair: P.y, top: P.A, pants: P.G, hairStyle: 'bob', raised: true });
+    parts.push(...raisedArm(P.A, P.s));
+    parts.push(rotBox(0.2, 0.26, 0.03, P.k, 0.56, 1.36, 0.08)); // badge
+    parts.push(rotBox(0.15, 0.2, 0.035, P.w, 0.56, 1.36, 0.08));
+    parts.push(sphere(0.035, P.r, 0.56, 1.36, 0.11)); // its reader light
+    return merge(parts);
+  },
+  // Unclaimed Moving Box (Merger Day): taped up, labeled, waiting to be smashed open.
+  moving_box: () => merge([
+    box(0.9, 0.62, 0.78, P.d, 0, 0, 0),
+    box(0.92, 0.04, 0.8, P.h, 0, 0.6, 0), // lid seam
+    box(0.16, 0.65, 0.8, P.y, 0, 0, 0), // tape
+    box(0.3, 0.18, 0.01, P.w, -0.22, 0.3, 0.395), // label
+    box(0.22, 0.025, 0.012, P.k, -0.22, 0.38, 0.4),
+    box(0.16, 0.025, 0.012, P.k, -0.24, 0.33, 0.4),
+  ]),
 };
 
 // --- Projectiles and shields --------------------------------------------------------
