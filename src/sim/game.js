@@ -22,7 +22,9 @@ import { Pool } from '../engine/pool.js';
 import { SpatialHash } from '../engine/spatialHash.js';
 import { Floor } from './floor.js';
 import { createPlayer, updatePlayer, addXp, recomputeStats, FOOT } from './player.js';
-import { makeEnemy, updateEnemies, resolveEnemies } from './enemies.js';
+import { makeEnemy, updateEnemies, resolveEnemies, spawnEnemy } from './enemies.js';
+import { ENEMIES } from '../../data/enemies.js';
+import { BEHAVIORS } from './behaviors/index.js';
 import { Spawner } from './spawner.js';
 import { WEAPONS } from '../../data/weapons.js';
 import { createWeapon, setWeaponLevel, updateWeapons, weaponReady } from './weapons/index.js';
@@ -33,6 +35,7 @@ import { makeTicket, makeItem, updateTickets, updateItems, dropItem } from './pi
 import { rollChoices, applyChoice, openChest } from './upgrades.js';
 import { PASSIVES } from '../../data/passives.js';
 import { Score } from './score.js';
+import { Zones } from './zones.js';
 
 const noop = () => {};
 const HEADLESS_VIEW = [854, 480]; // world px "on screen" when there is no page, as in the original
@@ -62,6 +65,7 @@ export class Sim {
     this.tickets = new Pool(TICKETS.maxOnFloor, makeTicket);
     this.items = new Pool(MAX_ITEMS, makeItem);
     this.score = new Score();
+    this.zones = new Zones();
     // The visible floor around the camera's ground point, in world px: the four screen
     // corners (x, y pairs, clockwise from bottom left), the extents, and the farthest corner.
     this.view = { corners: new Float64Array(8), left: 0, right: 0, top: 0, bottom: 0, radius: 0 };
@@ -106,6 +110,7 @@ export class Sim {
     this.projectiles.clear();
     this.tickets.clear();
     this.items.clear();
+    this.zones.clear();
     this.spawner.reset();
     // Start in a clear spot: walk down from the origin until the feet are off furniture.
     const p = this.player;
@@ -155,6 +160,7 @@ export class Sim {
     updateWeapons(this, dt);
     updateProjectiles(this, dt);
     this.enemies.compact(); // hash indices are stale after this point
+    this.zones.update(this, dt);
     updateTickets(this, dt);
     updateItems(this, dt); // may open a chest
     const comeback = p.hp <= 0 && COMEBACKS.find((c) => p[c.counter] > 0);
@@ -279,6 +285,16 @@ export class Sim {
   // --- Playtest helpers (the original's debug hotkeys) ---------------------------------
   debugSpawn(n) {
     for (let i = 0; i < n && this.enemies.count < this.enemies.capacity; i++) this.spawner.spawn(this);
+  }
+  // One of every regular user whose behavior is ported, in a ring round the tech.
+  debugSpawnEach() {
+    const ids = Object.keys(ENEMIES).filter((id) => !ENEMIES[id].boss && BEHAVIORS[ENEMIES[id].behavior] && id !== 'consultant_b');
+    const p = this.player;
+    ids.forEach((id, i) => {
+      const a = (i / ids.length) * Math.PI * 2;
+      spawnEnemy(this, id, p.x + Math.cos(a) * 140, p.y + Math.sin(a) * 140);
+    });
+    return ids.length;
   }
   debugSkip(seconds) {
     this.time += seconds;

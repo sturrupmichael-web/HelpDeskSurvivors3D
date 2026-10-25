@@ -90,6 +90,7 @@ function playtest(act) {
   const p = sim.player;
   if (act === 'spawn50') sim.debugSpawn(50);
   else if (act === 'spawn300') sim.debugSpawn(300);
+  else if (act === 'each') banner.show('ONE OF EACH', `${sim.debugSpawnEach()} kinds of user, in a ring round you.`, 2);
   else if (act === 'tool') {
     const w = sim.debugAddWeapon();
     if (w) banner.show(w.def.name.toUpperCase(), w.def.desc, 2);
@@ -110,7 +111,7 @@ function playtest(act) {
   } else if (act === 'clear') sim.debugClear();
   else if (act === 'restart') newShift();
 }
-const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyR: 'restart' };
+const PLAYTEST_KEYS = { Digit1: 'spawn50', Digit2: 'spawn300', Digit3: 'tool', Digit4: 'skip', Digit5: 'god', Digit6: 'clear', Digit7: 'levelup', Digit8: 'xp', Digit9: 'chest', Digit0: 'evokit', KeyU: 'each', KeyR: 'restart' };
 
 // Keys go to the topmost thing on screen: Settings, then the summary, the cards, the pause
 // menu, and last the floor. F (FPS counter) works everywhere.

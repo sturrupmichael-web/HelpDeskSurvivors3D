@@ -41,6 +41,7 @@ export function createPlayer(def, meta = null) {
     flash: 0,
     hurtCooldown: 0,
     slow: 1, // set each tick by floor hazards
+    tailgate: 1, // speed multiplier from Badge Brenda following you, for the next tick
     boost: 1, // speed multiplier while boostT > 0
     boostT: 0,
     slip: false, // standing on a wet floor: movement keeps its momentum
