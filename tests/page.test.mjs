@@ -24,9 +24,13 @@ export const tests = [
   }],
   ['F toggles the FPS counter', async (page) => {
     await page.keyboard.press('KeyF');
-    await page.waitForTimeout(700);
+    // The counter fills in after half a second of game frames, which a slow software
+    // renderer can stretch well past half a second of wall time: wait for the text.
+    const shown = await page
+      .waitForFunction(() => /\d+ FPS/.test(document.querySelector('.fps:not([hidden])')?.textContent ?? ''), null, { timeout: 10000 })
+      .then(() => true, () => false);
     const text = await page.evaluate(() => document.querySelector('.fps:not([hidden])')?.textContent ?? '');
-    assert(/FPS/.test(text), `counter shows "${text}"`);
+    assert(shown, `counter shows "${text}"`);
     await page.keyboard.press('KeyF');
   }],
   ['users are drawn instanced', async (page) => {
