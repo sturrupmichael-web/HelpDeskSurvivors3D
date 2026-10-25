@@ -294,7 +294,12 @@ export function markEnemy(e, seconds, amp) {
 // `weapon` is the tool that closed it, if any.
 export function killEnemy(game, e, weapon) {
   e.dead = true;
-  game.kills++;
+  const combo = game.score.onKill();
+  if (combo) {
+    const pl = game.player;
+    game.text(pl.x, pl.y - 40, `RESOLVED x${combo}!`, combo >= 100 ? '#ef7d57' : '#a7f070');
+    game.sfx('combo');
+  }
   if (e.xp > 0) {
     const t = dropTicket(game, e.x, e.y, e.xp * e.tagXp);
     if (weapon?.def.vacuum) t.magnet = true; // Remote Wipe sends the ticket straight to you

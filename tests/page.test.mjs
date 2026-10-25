@@ -72,6 +72,35 @@ export const tests = [
     assert(level === 2, `level ${level}`);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['Esc puts the shift on hold and resumes it', async (page) => {
+    await page.evaluate(() => {
+      while (sim.choices) sim.choose(sim.choices[0]);
+      sim.chest = null;
+    });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.pause-panel', { timeout: 5000 });
+    const t = await page.evaluate(() => sim.time);
+    await page.waitForTimeout(300);
+    assert((await page.evaluate(() => sim.time)) === t, 'the clock ran while paused');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !sim.paused && document.querySelector('.pause-panel').closest('.screen').hidden);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
+  ['burnout shows the summary and Next Shift starts over', async (page) => {
+    await page.evaluate(() => {
+      while (sim.choices) sim.choose(sim.choices[0]);
+      sim.chest = null;
+      sim.player.god = false;
+      sim.player.hp = -1;
+    });
+    await page.waitForSelector('.summary', { timeout: 5000 });
+    const title = await page.textContent('.summary h1');
+    assert(title === 'BURNOUT', `title ${title}`);
+    await page.waitForTimeout(700); // a held key can't skip the summary
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !sim.over && sim.time < 2);
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
   ['quality settings apply', async (page) => {
     await page.click('.gear');
     await page.click('[data-toggle=shadows]');

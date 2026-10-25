@@ -1,10 +1,11 @@
 // The helpdesk technician: movement, stats (character + shop upgrades + passives), sanity.
 // Ported from the original's src/game/player.js. Differences: the movement axis is passed
-// in (the simulation never reads input devices), sounds go through `game.sfx`, and the
-// overtime drain and Cloud Engineer ramp come back with the spawner and the other techs.
+// in (the simulation never reads input devices) and sounds go through `game.sfx`. The
+// Cloud Engineer ramp comes back with the other techs.
 
 import { PASSIVES, MAX_WEAPONS, MAX_PASSIVES } from '../../data/passives.js';
 import { XP_CURVE } from '../../data/player.js';
+import { OVERTIME } from '../../data/waves.js';
 
 const STAT_KEYS = ['moveSpeed', 'attackSpeed', 'area', 'damage', 'growth', 'damageTaken', 'cooldown', 'pickupRadius', 'luck'];
 
@@ -121,6 +122,10 @@ export function updatePlayer(game, axis, dt) {
   if (p.hurtCooldown > 0) p.hurtCooldown -= dt;
   if (p.invuln > 0) p.invuln -= dt;
   if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+  // Overtime exhaustion: every overtime level drains a little more sanity per second, so
+  // even a build users can't touch burns out eventually.
+  const ot = game.spawner.overtimeLevel(game);
+  if (ot && !p.god) p.hp -= OVERTIME.drainPerLevel * ot * dt;
 }
 
 // Sanity damage. Returns true if any damage was applied.
@@ -128,6 +133,7 @@ export function hurtPlayer(game, amount) {
   const p = game.player;
   if (p.god || p.invuln > 0 || amount <= 0) return false;
   p.hp -= amount * p.stats.damageTaken;
+  game.score.onHurt(); // getting hit breaks the CSAT streak
   if (p.hurtCooldown <= 0) {
     p.flash = 0.1;
     p.hurtCooldown = 0.25;
