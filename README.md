@@ -30,8 +30,9 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 | Touch | Put a finger down anywhere and drag (floating joystick) |
 | Esc / P / gamepad Start (or the II button) | Pause; also pauses when the tab is hidden. R restarts from the pause menu (press twice) |
 | Enter / Space | Next Shift on the end-of-shift summary |
+| M | Mute / unmute (sound starts after your first key press or tap) |
 | F | FPS counter on/off |
-| O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, screen shake, camera tilt and distance, playtest helpers |
+| O (or the gear button) | Settings: shadows, outlines, resolution, FPS counter, sound and music volume, screen shake, damage numbers, vibration, camera tilt and distance, playtest helpers |
 | 1 / 2 | Playtest: spawn 50 / 300 users |
 | 3 | Playtest: add the next tool |
 | 4 | Playtest: skip ahead 1 minute |
@@ -48,14 +49,16 @@ isn't kept in git; GitHub Actions builds it on every deploy.
 
 ```
 data/          balance and content, copied from the original (world pixels, as there)
-src/engine/    fixed-timestep loop, input, object pool, spatial hash (ported)
+src/engine/    fixed-timestep loop, input, object pool, spatial hash, synthesized sound and music,
+               phone vibration (all ported)
 src/sim/       the simulation: player, users and their behaviors/, tools (weapons/) and their
                projectiles, Closed Tickets and items (pickups.js), level-up cards and chests
                (upgrades.js), CSAT score (score.js), spawner and wave timeline, floor layout and collision. No Three.js, no DOM
 src/render/    Three.js: view, follow camera, floor chunks, the instanced horde, projectiles and
-               tool effects, pickups, models.js (every shape lives here)
-src/ui/        HTML/CSS overlays: HUD (hud.js), level-up cards and chests, pause menu, end-of-shift
-               summary, settings, FPS counter, touch stick (icons.js is the original's pixel icons)
+               tool effects, pickups, particles (fx.js), models.js (every shape lives here)
+src/ui/        HTML/CSS overlays: HUD (hud.js), floating numbers and words (floaters.js, a 2D
+               canvas), level-up cards and chests, pause menu, end-of-shift summary, settings,
+               FPS counter, touch stick (icons.js is the original's pixel icons)
 tests/         npm test: simulation tests in Node, page tests in headless Chromium
 ```
 

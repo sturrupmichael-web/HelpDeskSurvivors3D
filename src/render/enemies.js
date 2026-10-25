@@ -3,7 +3,7 @@
 // buffers; nothing is created per user, so a thousand users cost a handful of draw calls.
 
 import * as THREE from 'three';
-import { USER_MODELS, toonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
+import { USER_MODELS, flashToonMaterial, outlineMaterial, blobShadowGeometry, px } from './models.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -18,7 +18,13 @@ export class EnemyView {
     this.capacity = capacity;
     this.kinds = new Map(); // sprite id -> InstancedMesh
     for (const [id, build] of Object.entries(USER_MODELS)) {
-      const mesh = new THREE.InstancedMesh(build(), toonMaterial, capacity);
+      const geo = build();
+      // Hit flash per instance (see flashToonMaterial).
+      const flash = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+      flash.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aFlash', flash);
+      const mesh = new THREE.InstancedMesh(geo, flashToonMaterial, capacity);
+      mesh.userData.flash = flash;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false; // instances spread across the floor; bounds would be stale
       mesh.count = 0;
@@ -77,13 +83,16 @@ export class EnemyView {
       q.setFromEuler(euler);
       const s = e.scale;
       m.compose(pos.set(x, hop, z), q, scl.set(s, s, s));
+      mesh.userData.flash.array[mesh.count] = e.flash > 0 ? 0.85 : 0;
       mesh.setMatrixAt(mesh.count++, m);
       m.makeScale(s * (e.r / 7), 1, s * (e.r / 7)).setPosition(x, 0.012, z);
       this.shadows.setMatrixAt(shadows++, m);
     }
     for (const mesh of this.kinds.values()) {
       mesh.userData.ink.count = mesh.count;
-      if (mesh.count) mesh.instanceMatrix.needsUpdate = true;
+      if (!mesh.count) continue;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.flash.needsUpdate = true;
     }
     this.shadows.count = shadows;
     this.shadows.instanceMatrix.needsUpdate = true;

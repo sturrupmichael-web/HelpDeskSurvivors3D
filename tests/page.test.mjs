@@ -105,6 +105,13 @@ export const tests = [
     await page.waitForFunction(() => !sim.over && sim.time < 2);
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
+  ['M mutes the sound and the HUD says so', async (page) => {
+    await page.keyboard.press('KeyM');
+    await page.waitForSelector('.hud .muted:not([hidden])', { timeout: 5000 });
+    await page.keyboard.press('KeyM');
+    await page.waitForSelector('.hud .muted[hidden]', { state: 'attached', timeout: 5000 });
+    assert(page.errors.length === 0, page.errors.join('\n'));
+  }],
   ['quality settings apply', async (page) => {
     await page.click('.gear');
     await page.click('[data-toggle=shadows]');

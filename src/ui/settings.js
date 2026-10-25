@@ -14,6 +14,10 @@ export function defaultSettings() {
     fps: false, // on-screen FPS counter
     shake: true, // screen shake
     stick: true, // on-screen touch joystick
+    numbers: true, // floating damage numbers
+    sfx: 1, // sound effect volume (0..1); M mutes everything
+    music: 0.7, // music volume (0..1)
+    vibration: true, // phone buzzes on hits, level-ups and burnout
     // Camera tuning for playtesting (src/render/cameraRig.js).
     tilt: 55,
     zoom: 1,

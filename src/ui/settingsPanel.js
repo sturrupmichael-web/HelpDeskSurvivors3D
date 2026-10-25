@@ -1,8 +1,9 @@
-// The Settings panel (gear button, or O): quality options, the FPS counter, and camera
-// sliders for playtesting. Changes apply at once and are saved.
+// The Settings panel (gear button, or O): quality options, the FPS counter, sound and
+// comfort options, and camera sliders for playtesting. Changes apply at once and are saved.
 
 import { saveSettings, defaultSettings } from './settings.js';
 
+const pct = (v) => `${Math.round(v * 100)}%`;
 const RES_LABELS = { low: 'Low (1x)', medium: 'Medium (1.5x)', high: 'High (native)' };
 
 export class SettingsPanel {
@@ -47,8 +48,13 @@ export class SettingsPanel {
         .map(([k, l]) => `<button class="choice${s.resolution === k ? ' on' : ''}" data-res="${k}">${l}</button>`)
         .join('')}</span></div>
       ${toggle('fps', 'FPS counter <kbd>F</kbd>')}
+      <h3>Sound</h3>
+      <div class="row"><span>Effects <b class="v-sfx">${pct(s.sfx)}</b></span><input type="range" min="0" max="1" step="0.05" value="${s.sfx}" data-range="sfx"></div>
+      <div class="row"><span>Music <b class="v-music">${pct(s.music)}</b></span><input type="range" min="0" max="1" step="0.05" value="${s.music}" data-range="music"></div>
       <h3>Comfort</h3>
       ${toggle('shake', 'Screen shake')}
+      ${toggle('numbers', 'Damage numbers')}
+      ${toggle('vibration', 'Vibration (phones)')}
       ${toggle('stick', 'Touch joystick')}
       <h3>Camera (playtest tuning)</h3>
       <div class="row"><span>Tilt <b class="v-tilt">${s.tilt}°</b></span><input type="range" min="40" max="70" step="1" value="${s.tilt}" data-range="tilt"></div>
@@ -91,7 +97,8 @@ export class SettingsPanel {
     const key = e.target.dataset.range;
     if (!key) return;
     this.s[key] = Number(e.target.value);
-    this.panel.querySelector(`.v-${key}`).textContent = key === 'tilt' ? `${this.s.tilt}°` : `${this.s.zoom.toFixed(2)}x`;
+    const v = this.s[key];
+    this.panel.querySelector(`.v-${key}`).textContent = key === 'tilt' ? `${v}°` : key === 'zoom' ? `${v.toFixed(2)}x` : pct(v);
     this.changed();
   }
 

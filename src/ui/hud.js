@@ -36,6 +36,7 @@ export class Hud {
       <div class="hud-right">
         <div>TICKETS CLOSED <b class="kills">0</b></div>
         <div>CSAT <b class="csat">0</b> <span class="mult"></span></div>
+        <div class="muted" hidden>MUTED <kbd>M</kbd></div>
       </div>
       <div class="hud-banner" hidden><b></b><span></span></div>
       <div class="edge-arrow" hidden></div>`;
@@ -51,11 +52,15 @@ export class Hud {
       hp: q('.hp-fill'), hpText: q('.hp-text'), sanity: q('.hud-sanity'),
       kills: q('.kills'), csat: q('.csat'), mult: q('.mult'),
       weapons: q('.weapons'), passives: q('.passives'),
-      banner: q('.hud-banner'), arrow: q('.edge-arrow'),
+      banner: q('.hud-banner'), arrow: q('.edge-arrow'), muted: q('.muted'),
     };
     this.cache = {};
     this.bannerT = 0;
     this.pt = { x: 0, y: 0 };
+  }
+
+  setMuted(m) {
+    this.el.muted.hidden = !m;
   }
 
   setVisible(v) {

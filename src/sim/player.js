@@ -138,6 +138,7 @@ export function hurtPlayer(game, amount) {
     p.flash = 0.1;
     p.hurtCooldown = 0.25;
     game.sfx('hurt');
+    game.shake(2);
   }
   return true;
 }

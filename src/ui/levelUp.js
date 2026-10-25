@@ -119,7 +119,7 @@ export class LevelUpScreen {
 
   // Keyboard and gamepad (buttons arrive as Pad* codes). Returns true if it used the key.
   key(code) {
-    if (!this.open || code === 'KeyO') return false; // Settings still opens over the cards
+    if (!this.open || code === 'KeyO' || code === 'KeyM') return false; // Settings and mute still work over the cards
     if (this.choices) {
       if (DIGITS[code] !== undefined) this.pick(DIGITS[code]);
       else if (this.onlyPizza && code === 'KeyA') this.pick(0, true);
