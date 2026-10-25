@@ -33,7 +33,9 @@ export class CameraRig {
     this.shakeEnabled = true;
     this.distance = 40;
     // Visible floor in world px, for chunk culling and (later) the spawn ring.
-    this.footprint = { x0: 0, y0: 0, x1: 0, y1: 0, radius: 0 };
+    // `corners` are the screen corners on the floor relative to the followed point
+    // (bottom left, bottom right, top right, top left), which the spawner uses.
+    this.footprint = { x0: 0, y0: 0, x1: 0, y1: 0, radius: 0, corners: new Float64Array(8) };
   }
 
   setOptions(o) {
@@ -92,7 +94,8 @@ export class CameraRig {
     f.x0 = f.y0 = Infinity;
     f.x1 = f.y1 = -Infinity;
     f.radius = 0;
-    for (const [nx, ny] of ndc) {
+    for (let i = 0; i < 4; i++) {
+      const [nx, ny] = ndc[i];
       ray.setFromCamera(v2.set(nx, ny), this.camera);
       // A corner above the horizon (very shallow tilts) is clamped to 120 units out.
       if (!ray.ray.intersectPlane(ground, hit)) hit.copy(ray.ray.direction).multiplyScalar(120).add(ray.ray.origin);
@@ -102,7 +105,9 @@ export class CameraRig {
       f.x1 = Math.max(f.x1, wx);
       f.y0 = Math.min(f.y0, wy);
       f.y1 = Math.max(f.y1, wy);
-      f.radius = Math.max(f.radius, Math.hypot(wx - this.x * 16, wy - this.z * 16));
+      f.corners[i * 2] = wx - this.x * 16;
+      f.corners[i * 2 + 1] = wy - this.z * 16;
+      f.radius = Math.max(f.radius, Math.hypot(f.corners[i * 2], f.corners[i * 2 + 1]));
     }
   }
 }

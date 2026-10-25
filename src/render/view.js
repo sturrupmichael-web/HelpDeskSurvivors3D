@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { CameraRig } from './cameraRig.js';
 import { FloorView } from './floor.js';
-import { createTechModel, px } from './models.js';
+import { createTechModel, blobShadowGeometry, px } from './models.js';
+import { EnemyView } from './enemies.js';
 import { FOOT } from '../sim/player.js';
 
 const BACKGROUND = '#1a1c2c'; // the original's near-black navy
@@ -51,12 +52,25 @@ export class View {
     this.scene.add(this.tech.root);
     // Blob shadow under the tech, shown when real shadows are off.
     this.blob = new THREE.Mesh(
-      new THREE.CircleGeometry(0.42, 16),
+      blobShadowGeometry(0.42),
       new THREE.MeshBasicMaterial({ color: '#0a0c18', transparent: true, opacity: 0.4, depthWrite: false }),
     );
-    this.blob.rotation.x = -Math.PI / 2;
     this.blob.position.y = 0.01;
     this.scene.add(this.blob);
+    // Sanity bar on the floor just in front of the tech, like the original's bar under the
+    // sprite. Drawn over everything, so the horde never hides it.
+    this.sanity = new THREE.Group();
+    const barBack = new THREE.Mesh(new THREE.PlaneGeometry(1.36, 0.2), new THREE.MeshBasicMaterial({ color: BACKGROUND, depthWrite: false, depthTest: false }));
+    this.sanityFill = new THREE.Mesh(new THREE.PlaneGeometry(1.24, 0.1), new THREE.MeshBasicMaterial({ color: '#b13e53', depthWrite: false, depthTest: false }));
+    this.sanityFill.geometry.translate(0.62, 0, 0); // grow from the left edge
+    this.sanityFill.position.set(-0.62, 0, 0.001);
+    barBack.renderOrder = 10;
+    this.sanityFill.renderOrder = 11;
+    this.sanity.add(barBack, this.sanityFill);
+    this.sanity.rotation.x = -Math.PI / 2;
+    this.scene.add(this.sanity);
+
+    this.enemies = new EnemyView(this.scene, sim.enemies.capacity);
     this.techYaw = 0;
     this.walkPhase = 0;
 
@@ -113,7 +127,9 @@ export class View {
     const z = px(lerp(p.py, p.y, alpha) + FOOT);
     this.updateTech(x, z, dt);
     this.rig.update(x, z, dt);
+    this.sim.setView(this.rig.footprint.corners); // the spawner needs to know what's on screen
     this.floor.update(this.rig.footprint, this.rig.x, this.rig.z);
+    this.enemies.update(this.sim, alpha, this.rig.footprint);
 
     // The sun's shadow box follows the camera, snapped to its texel grid so edges don't crawl.
     const step = (SHADOW_SPAN * 2) / this.sun.shadow.mapSize.x;
@@ -146,5 +162,7 @@ export class View {
     t.body.position.y = p.moving ? Math.abs(Math.cos(this.walkPhase)) * 0.06 : lerp(t.body.position.y, 0, k);
     this.blob.position.x = x;
     this.blob.position.z = z;
+    this.sanity.position.set(x, 0.03, z + 0.62);
+    this.sanityFill.scale.x = Math.max(0.0001, p.hp / p.maxHp);
   }
 }

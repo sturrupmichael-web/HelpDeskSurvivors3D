@@ -29,6 +29,19 @@ export const tests = [
     assert(/FPS/.test(text), `counter shows "${text}"`);
     await page.keyboard.press('KeyF');
   }],
+  ['users are drawn instanced', async (page) => {
+    await page.evaluate(() => {
+      sim.player.god = true;
+      sim.debugSpawn(200);
+    });
+    await page.waitForTimeout(400);
+    const drawn = await page.evaluate(() => [...view.enemies.kinds.values()].reduce((n, m) => n + m.count, 0));
+    assert(drawn > 0, 'no users drawn');
+    await page.evaluate(() => {
+      sim.debugClear();
+      sim.player.god = false;
+    });
+  }],
   ['quality settings apply', async (page) => {
     await page.click('.gear');
     await page.click('[data-toggle=shadows]');

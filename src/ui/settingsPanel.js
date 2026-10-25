@@ -6,10 +6,11 @@ import { saveSettings, defaultSettings } from './settings.js';
 const RES_LABELS = { low: 'Low (1x)', medium: 'Medium (1.5x)', high: 'High (native)' };
 
 export class SettingsPanel {
-  // `onChange(settings)` applies them to the game.
-  constructor(root, settings, onChange) {
+  // `onChange(settings)` applies them to the game; `playtest(action)` runs a playtest helper.
+  constructor(root, settings, onChange, playtest) {
     this.s = settings;
     this.onChange = onChange;
+    this.playtest = playtest;
     this.button = document.createElement('button');
     this.button.className = 'gear';
     this.button.setAttribute('aria-label', 'Settings');
@@ -51,13 +52,27 @@ export class SettingsPanel {
       <h3>Camera (playtest tuning)</h3>
       <div class="row"><span>Tilt <b class="v-tilt">${s.tilt}°</b></span><input type="range" min="40" max="70" step="1" value="${s.tilt}" data-range="tilt"></div>
       <div class="row"><span>Distance <b class="v-zoom">${s.zoom.toFixed(2)}x</b></span><input type="range" min="0.7" max="1.5" step="0.05" value="${s.zoom}" data-range="zoom"></div>
-      <div class="row buttons"><button data-act="reset-camera">Reset camera</button><button data-act="close">Close <kbd>O</kbd></button></div>`;
+      <div class="row buttons"><button data-act="reset-camera">Reset camera</button></div>
+      <h3>Playtest helpers</h3>
+      <div class="grid">
+        <button data-play="spawn50">+50 users <kbd>1</kbd></button>
+        <button data-play="spawn300">+300 users <kbd>2</kbd></button>
+        <button data-play="skip">Skip 1 minute <kbd>4</kbd></button>
+        <button data-play="god">God mode <kbd>5</kbd></button>
+        <button data-play="clear">Clear users <kbd>6</kbd></button>
+        <button data-play="restart">New shift <kbd>R</kbd></button>
+      </div>
+      <div class="row buttons"><button data-act="close">Close <kbd>O</kbd></button></div>`;
   }
 
   click(e) {
     const b = e.target.closest('button');
     if (!b) return;
     const s = this.s;
+    if (b.dataset.play) {
+      this.playtest(b.dataset.play);
+      return this.toggle(false);
+    }
     if (b.dataset.toggle) s[b.dataset.toggle] = !s[b.dataset.toggle];
     else if (b.dataset.res) s.resolution = b.dataset.res;
     else if (b.dataset.act === 'reset-camera') ({ tilt: s.tilt, zoom: s.zoom } = defaultSettings());
