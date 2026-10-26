@@ -84,6 +84,10 @@ export function leaderboard(m, mapId = m.meta.data.map) {
     m.sfx('click');
     m.title();
   };
+  const retry = () => {
+    m.sfx('click');
+    again();
+  };
   m.show(
     `<div class="panel wide board" tabindex="-1">
       <h2>LEADERBOARD</h2>
@@ -106,6 +110,7 @@ export function leaderboard(m, mapId = m.meta.data.map) {
         leaderboard(m, MAP_ORDER[(at + MAP_ORDER.length) % MAP_ORDER.length]);
       } else if (code === 'KeyC') setFilter('clean');
       else if (code === 'KeyH') setFilter('hardcore');
+      else if (code === 'KeyR' && m.el.querySelector('.board-retry')) retry();
       else if (code === 'Escape' || code === 'Enter') back();
       else return false;
     },
@@ -128,7 +133,14 @@ export function leaderboard(m, mapId = m.meta.data.map) {
   const live = () => m.el.querySelector('.board-body') === body; // false once the screen has changed
   topScores(mapId, filter).then(async (r) => {
     if (!live()) return;
-    if (!r.ok) return (body.innerHTML = '<p class="board-msg">Couldn\'t reach the leaderboard. Check your connection and try again.</p>');
+    if (!r.ok) {
+      // Say why, so a player can tell us: no answer at all (offline, a blocked site, too
+      // slow) or the server refusing (its status code).
+      const why = r.status ? `The leaderboard server answered with error ${r.status}.` : 'No answer from the leaderboard server. Your network or a content blocker may be stopping it.';
+      body.innerHTML = `<p class="board-msg">Couldn't reach the leaderboard. ${why}</p><button class="board-retry" data-act="retry">Try again <kbd>R</kbd></button>`;
+      body.querySelector('[data-act=retry]').addEventListener('click', retry);
+      return;
+    }
     const inTop = !!me && r.rows.some((x) => x.name === me);
     if (!r.rows.length) body.innerHTML = '<p class="board-msg">No scores on this map yet. Be the first.</p>';
     else

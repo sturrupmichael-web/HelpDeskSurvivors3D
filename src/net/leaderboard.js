@@ -46,7 +46,8 @@ const filterQ = (filter) => (filter === 'clean' || filter === true ? '&mods=eq.'
 // Top scores on one map: [{ name, character, seconds, csat, won, mods, mult, score }].
 export async function topScores(map, filter = '') {
   const q = `?select=name,character,seconds,csat,won,mods,mult,score&map=eq.${encodeURIComponent(map)}${filterQ(filter)}&order=score.desc,seconds.desc&limit=${LB.top}`;
-  const r = await call(q);
+  let r = await call(q);
+  if (!r.ok && !r.status) r = await call(q); // no answer: one more try (a slow phone signal)
   if (!r.ok) return r;
   return { ok: true, rows: await r.res.json() };
 }

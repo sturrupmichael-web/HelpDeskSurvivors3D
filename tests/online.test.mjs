@@ -133,11 +133,15 @@ export const tests = [
     await page.waitForSelector('.panel.title');
     assert(errors(page).length === 0, errors(page).join('\n'));
   }],
-  ['offline, the board says so instead of failing', async (page) => {
+  ['offline, the board says why and R tries again', async (page) => {
     fake.offline = true;
     await page.keyboard.press('KeyB');
     await page.waitForFunction(() => /Couldn't reach/.test(document.querySelector('.board-body')?.textContent ?? ''), null, { timeout: 15000 });
+    assert(/No answer/.test(await page.textContent('.board-body')), 'says why');
     fake.offline = false;
+    // R tries again, and the board loads without signing in.
+    await page.keyboard.press('KeyR');
+    await page.waitForSelector('.board-table');
     // The browser logs each refused request; that's what this test is about.
     page.errors = page.errors.filter((e) => !/ERR_FAILED/.test(e));
     await page.keyboard.press('Escape');
