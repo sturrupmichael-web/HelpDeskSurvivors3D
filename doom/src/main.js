@@ -34,6 +34,11 @@ const occupied = (j) => {
 function update(dt) {
   input.pollGamepad();
   for (const a of input.presses()) {
+    if (a === 'keys') {
+      // Playtest helper until badges arrive in stage 4: all three badges.
+      for (const k of ['blue', 'yellow', 'red']) player.keys.add(k);
+      hud.message('ALL BADGES (PLAYTEST)');
+    }
     if (a === 'use') {
       const res = level.use(player.x, player.z, player.feet, player.yaw, player.keys);
       if (res?.locked) hud.message(`YOU NEED A ${res.locked.toUpperCase()} BADGE TO OPEN THIS DOOR`);
