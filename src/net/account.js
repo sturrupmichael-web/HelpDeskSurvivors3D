@@ -89,8 +89,13 @@ const tab = {
 // Where Google sends the player back to: this page, without any #tokens.
 const returnUrl = () => location.origin + location.pathname;
 
+// Why a request failed, in the server's own words when it gave any (Supabase Auth says
+// `msg`, the database `message`), so the screens can tell the player.
+const reason = (r) => String(r.body?.msg ?? r.body?.message ?? r.body?.error_description ?? '').slice(0, 160);
+
 export const account = {
   lastError: '', // why the last Google sign-in didn't finish, shown on the Account screen
+  lastFail: null, // { status, reason } of the last failed guest sign-up or name claim
   get user() {
     return session?.user ?? null;
   },
@@ -141,7 +146,10 @@ export const account = {
     }
     if (!makeGuest) return false;
     const r = await request(`${LB.url}/auth/v1/signup`, { method: 'POST', body: '{}' });
-    if (!r.ok || !fromTokens(r.body)) return false;
+    if (!r.ok || !fromTokens(r.body)) {
+      this.lastFail = { status: r.status, reason: reason(r) };
+      return false;
+    }
     store(fromTokens(r.body));
     cachedName = undefined; // brand new: no name yet
     return true;
@@ -169,14 +177,15 @@ export const account = {
 
   // Claims or changes the leaderboard name. { ok } or { ok: false, taken: true }.
   async setName(newName) {
-    if (!(await this.ensure(true))) return { ok: false };
+    this.lastFail = null;
+    if (!(await this.ensure(true))) return { ok: false, ...this.lastFail };
     const had = await this.name();
     if (had === null) return { ok: false };
     const r = had
       ? await this.rest(`players?user_id=eq.${session.user.id}`, { method: 'PATCH', body: JSON.stringify({ name: newName }) })
       : await this.rest('players', { method: 'POST', body: JSON.stringify({ name: newName }) });
     if (r.status === 409) return { ok: false, taken: true };
-    if (!r.ok) return { ok: false };
+    if (!r.ok) return { ok: false, status: r.status, reason: reason(r) };
     cachedName = newName;
     return { ok: true };
   },

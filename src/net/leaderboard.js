@@ -69,7 +69,7 @@ export async function myRank(map, name, filter = '') {
 // (1 = top). The database fills in the player's name from their account.
 export async function postScore(row) {
   const r = await account.rest(LB.table, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) });
-  if (!r.ok) return r;
+  if (!r.ok) return { ok: false, status: r.status, reason: String(r.body?.message ?? '').slice(0, 160) };
   const score = Math.round(row.csat * (row.mult ?? 1));
   const c = await call(`?select=id&map=eq.${encodeURIComponent(row.map)}&score=gt.${score}`, {
     method: 'HEAD',

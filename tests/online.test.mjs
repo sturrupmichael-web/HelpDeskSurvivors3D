@@ -171,4 +171,28 @@ export const tests = [
     await toTitle(page);
     assert(errors(page).length === 0, errors(page).join('\n'));
   }],
+  ['signed out, a refused guest sign-up says why instead of "Couldn\'t reach"', async (page) => {
+    // Sign out on this device, then finish a shift as a new player.
+    await page.evaluate(() => localStorage.removeItem('helpdesk-survivors-3d.auth.v1'));
+    await page.reload();
+    await page.waitForFunction(() => window.sim && !document.getElementById('boot'), null, { timeout: 15000 });
+    await page.waitForSelector('.panel.title');
+    fake.signupError = { status: 422, msg: 'Anonymous sign-ins are disabled' };
+    for (let i = 0; i < 4 && !(await page.evaluate(() => !sim.menu)); i++) {
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(200);
+    }
+    await page.waitForFunction(() => !sim.menu);
+    await page.evaluate(() => (sim.score.csat = 100));
+    await burnOut(page);
+    await page.waitForSelector('.summary .board-post input.board-name', { timeout: 5000 });
+    await page.fill('.board-post input', 'Newbie');
+    await page.press('.board-post input', 'Enter');
+    await page.waitForFunction(() => /error 422/.test(document.querySelector('.board-post .board-msg').textContent), null, { timeout: 10000 });
+    const msg = await page.textContent('.board-post .board-msg');
+    assert(msg.includes('Anonymous sign-ins are disabled') && !/Couldn't reach/.test(msg), msg);
+    fake.signupError = null;
+    page.errors = page.errors.filter((e) => !/status of 422/.test(e));
+    assert(errors(page).length === 0, errors(page).join('\n'));
+  }],
 ];

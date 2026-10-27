@@ -21,6 +21,7 @@ export class FakeSupabase {
     this.saves = new Map(); // user_id -> { data, updated_at }
     this.signups = 0;
     this.offline = false;
+    this.signupError = null; // { status, msg }: guest sign-ups are refused
     this.seq = 0;
   }
 
@@ -55,6 +56,7 @@ export class FakeSupabase {
     const path = url.pathname;
 
     if (path === '/auth/v1/signup') {
+      if (this.signupError) return reply(this.signupError.status, { code: this.signupError.status, msg: this.signupError.msg });
       this.signups++;
       return reply(200, token(`guest-${++this.seq}`));
     }
