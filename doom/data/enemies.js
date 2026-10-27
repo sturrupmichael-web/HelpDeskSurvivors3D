@@ -18,6 +18,11 @@
 //   voice       pitch of its squawks
 //   counts      false: doesn't count towards the kill % (summoned minions)
 //   drops       item id left behind on death
+//   pair        users with the same pair name look out for each other: when one goes
+//               down, the others nearby enrage (faster, attack more often)
+//   tailgate    { radius, slow }: slows you down while it's this close (Badge Brenda)
+//   crate       { loot: [item ids] }: a breakable box that drops one of these
+//   phases      boss health thresholds: a banner, and optionally a user to `spawn`
 
 export const ENEMIES = {
   pam: {
@@ -92,6 +97,59 @@ export const ENEMIES = {
       { at: 0.66, banner: "ESCALATED: now cc'ing your manager's manager." },
       { at: 0.33, banner: "FINAL PHASE: it's 8:59. The board is logging in." },
     ],
+  },
+  // Merger Day (E1M2): the new parent company's people.
+  consultant: {
+    from: 'consultant', model: { user: 'consultant' }, role: 'Ranged pair: throws slide decks',
+    hp: 50, speed: 3.8, radius: 0.5, painChance: 0.5, voice: 240, pair: 'synergy',
+    melee: { damage: [4, 10], range: 1.1, time: 0.3, cooldown: 1 },
+    missile: { damage: [8, 16], speed: 12, radius: 0.28, sprite: 'deck', time: 0.5, cooldown: 1.8, colors: ['#f4f4f4', '#ffcd75'], sound: 'mailWhoosh' },
+    drops: 'mail',
+  },
+  consultant_b: {
+    from: 'consultant_b', model: { user: 'consultant_b' }, role: 'Ranged pair: throws slide decks',
+    hp: 50, speed: 3.8, radius: 0.5, painChance: 0.5, voice: 260, pair: 'synergy',
+    melee: { damage: [4, 10], range: 1.1, time: 0.3, cooldown: 1 },
+    missile: { damage: [8, 16], speed: 12, radius: 0.28, sprite: 'deck', time: 0.5, cooldown: 1.8, colors: ['#f4f4f4', '#ffcd75'], sound: 'mailWhoosh' },
+  },
+  dave: {
+    from: 'dave', model: { user: 'dave' }, role: 'Melee: comes back as Dave (2)',
+    hp: 40, speed: 4, radius: 0.5, painChance: 0.6, voice: 300,
+    melee: { damage: [5, 14], range: 1.1, time: 0.3, cooldown: 0.9 },
+    onDeath: { spawn: 'dave2', count: 1 },
+  },
+  dave2: {
+    from: 'dave2', model: { user: 'dave2' }, role: 'Fast melee',
+    hp: 25, speed: 6.5, radius: 0.5, painChance: 0.6, voice: 330, counts: false,
+    melee: { damage: [4, 10], range: 1.1, time: 0.22, cooldown: 0.7 },
+  },
+  brenda: {
+    from: 'brenda', model: { user: 'brenda' }, role: 'Melee: slows you while close',
+    hp: 45, speed: 5, radius: 0.5, painChance: 0.5, voice: 380,
+    melee: { damage: [3, 9], range: 1.1, time: 0.3, cooldown: 0.8 },
+    tailgate: { radius: 4.5, slow: 0.72 },
+  },
+  takeover: {
+    from: 'takeover', model: { boss: 'takeover' }, role: 'Boss',
+    hp: 2000, speed: 3.8, radius: 1.0, painChance: 0.04, voice: 80, boss: true, scale: 1.8,
+    melee: { damage: [20, 40], range: 2.2, time: 0.5, cooldown: 1.2 },
+    missile: { damage: [12, 25], speed: 13, radius: 0.35, sprite: 'memo', count: 5, spread: 0.5, time: 0.8, cooldown: 2.2, colors: ['#f4f4f4', '#b13e53'], sound: 'thud' },
+    summon: { id: 'consultant', count: 2, every: 14, max: 4 },
+    phases: [
+      { at: 0.5, banner: 'SPIN-OFF! The Subsidiary has entered the meeting.', spawn: 'subsidiary' },
+      { at: 0.25, banner: 'REORG! Everything is being restructured.' },
+    ],
+  },
+  subsidiary: {
+    from: 'subsidiary', model: { boss: 'subsidiary' }, role: 'Mini-boss',
+    hp: 500, speed: 4.6, radius: 0.8, painChance: 0.1, voice: 110, scale: 1.35, counts: false,
+    melee: { damage: [15, 30], range: 1.8, time: 0.45, cooldown: 1.1 },
+    missile: { damage: [10, 20], speed: 13, radius: 0.32, sprite: 'memo', count: 3, spread: 0.3, time: 0.6, cooldown: 2.0, colors: ['#f4f4f4', '#41a6f6'], sound: 'thud' },
+  },
+  // An Unclaimed Moving Box: smash it, there's always something inside.
+  moving_box: {
+    from: 'moving_box', model: { user: 'moving_box' }, role: 'Breakable crate',
+    hp: 25, speed: 0, radius: 0.55, painChance: 0, counts: false, crate: { loot: ['pizza', 'coffee', 'ticketClip', 'mail', 'keycap', 'snack', 'power'] },
   },
   // A swollen UPS battery: DOOM's exploding barrel, office edition.
   ups: {

@@ -21,7 +21,9 @@ const lightCurve = (l) => Math.pow(Math.max(0, Math.min(255, l)) / 255, 1.3);
 const rand = ([a, b]) => a + Math.random() * (b - a);
 
 export class Game {
-  constructor({ level, renderer, hud, skill }) {
+  // `carry` is what you bring from the last level (see `carry()`): DOOM keeps your
+  // health, armor, tools and ammo between levels, but not badges or power-ups.
+  constructor({ level, renderer, hud, skill, carry = null }) {
     this.level = level;
     this.renderer = renderer;
     this.hud = hud;
@@ -35,6 +37,14 @@ export class Game {
     const start = level.things.find((t) => t.type === 'start') ?? { x: level.S * 1.5, z: level.S * 1.5, angle: 0 };
     this.player = new Player(level, start);
     this.arsenal = new Arsenal(this);
+    if (carry) {
+      this.player.health = carry.health;
+      this.player.armor = carry.armor;
+      this.player.armorClass = carry.armorClass;
+      this.arsenal.owned = new Set(carry.owned);
+      this.arsenal.ammo = { ...carry.ammo };
+      this.arsenal.current = carry.current;
+    }
     this.view = new ViewWeapon(renderer.viewScene);
     this.view.show(this.arsenal.current);
     this.actors = [];
@@ -86,6 +96,12 @@ export class Game {
     const m = new Monster(this, type, x, z, opt);
     this.actors.push(m);
     return m;
+  }
+
+  carry() {
+    const pl = this.player;
+    const a = this.arsenal;
+    return { health: Math.max(1, Math.ceil(pl.health)), armor: pl.armor, armorClass: pl.armorClass, owned: [...a.owned], ammo: { ...a.ammo }, current: a.pending ?? a.current };
   }
 
   // --- Pickups -----------------------------------------------------------------------------
@@ -558,6 +574,11 @@ export class Game {
     const hz = cell?.def?.hazard;
     const onFloor = pl.feet <= this.level.floorAt(pl.x, pl.z) + 0.05;
     pl.slow = hz?.slow && onFloor ? hz.slow : 1;
+    // Badge Brenda, following you in.
+    if (this.tailgate?.t > 0) {
+      this.tailgate.t -= dt;
+      pl.slow *= this.tailgate.slow;
+    }
     if (!hz || !onFloor || pl.dead) {
       this.hazardT = Math.min(this.hazardT, 0.2);
       return;

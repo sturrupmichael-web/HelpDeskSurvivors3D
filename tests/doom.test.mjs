@@ -42,13 +42,18 @@ export const tests = [
     assert(await page.evaluate(() => doom.mode) === 'title', 'not on the title screen');
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
-  ['the level can be finished: every badge, item, user, secret and the exit can be reached', async (page) => {
-    const r = JSON.parse(await page.evaluate(REACH));
-    assert(r.order.join() === 'blue,yellow,red', `badges found in order ${r.order}`);
-    assert(r.exit.every(Boolean), 'the exit switch is out of reach');
-    assert(r.secrets.every(Boolean), 'a secret is out of reach');
-    assert(r.unreachableItems.length === 0, `unreachable items: ${r.unreachableItems}`);
-    assert(r.unreachableMonsters.length === 0, `unreachable users: ${r.unreachableMonsters}`);
+  ['every level can be finished: every badge, item, user, secret and the exit can be reached', async (page) => {
+    const n = await page.evaluate(() => doom.maps.length);
+    assert(n >= 2, `only ${n} levels`);
+    for (let i = 0; i < n; i++) {
+      const r = JSON.parse(await page.evaluate(`doom.playLevel(${i}, null), ${REACH}`));
+      const name = await page.evaluate(() => doom.level.name);
+      assert(r.order.join() === 'blue,yellow,red', `${name}: badges found in order ${r.order}`);
+      assert(r.exit.every(Boolean), `${name}: the exit switch is out of reach`);
+      assert(r.secrets.every(Boolean), `${name}: a secret is out of reach`);
+      assert(r.unreachableItems.length === 0, `${name}: unreachable items: ${r.unreachableItems}`);
+      assert(r.unreachableMonsters.length === 0, `${name}: unreachable users: ${r.unreachableMonsters}`);
+    }
   }],
   ['harder skills bring more users', async (page) => {
     const counts = await page.evaluate(() => [3, 4].map((s) => { doom.start(s); return doom.game.stats.totalKills; }));
@@ -78,23 +83,51 @@ export const tests = [
     });
     assert(r.dead && r.kills === 1, JSON.stringify(r));
   }],
-  ['the exit switch leads to the tally, then back to the title', async (page) => {
+  ['each exit leads to the tally and the next level, keeping your tools; the last one to the ending', async (page) => {
     const r = await page.evaluate(() => {
+      const exitAt = () => {
+        // Stand next to the level's exit switch, facing it, and press it.
+        const L = doom.level;
+        const g = doom.game;
+        for (let j = 0; j < L.cells.length; j++) {
+          if (!L.cells[j].def?.exit) continue;
+          const c = j % L.w;
+          const r = (j / L.w) | 0;
+          for (const [dc, dr, yaw] of [[-1, 0, -Math.PI / 2], [1, 0, Math.PI / 2], [0, -1, Math.PI], [0, 1, 0]]) {
+            const n = L.cell(c + dc, r + dr);
+            if (!n || n.kind !== 'open') continue;
+            g.player.x = (c + dc + 0.5) * L.S;
+            g.player.z = (r + dr + 0.5) * L.S;
+            g.player.yaw = yaw;
+            g.use();
+            return;
+          }
+        }
+      };
+      const press = () => {
+        doom.input.queue.push('use');
+        doom.tick(1);
+      };
       doom.start(3);
-      const g = doom.game;
-      g.player.x = 74 * 2 + 1;
-      g.player.z = 47 * 2 + 1;
-      g.player.yaw = -Math.PI / 2; // facing east, at the switch
-      g.use();
+      doom.game.arsenal.owned.add('reimage');
+      exitAt();
       doom.tick(60);
-      const mode = doom.mode;
-      doom.input.queue.push('use');
-      doom.tick(1);
-      doom.input.queue.push('use');
-      doom.tick(1);
-      return { mode, after: doom.mode };
+      const modes = [doom.mode];
+      press();
+      press();
+      modes.push(doom.mode, doom.mapIndex, doom.game.arsenal.owned.has('reimage'));
+      exitAt();
+      doom.tick(60);
+      modes.push(doom.mode);
+      press();
+      press();
+      modes.push(doom.mode);
+      press();
+      press();
+      modes.push(doom.mode);
+      return modes;
     });
-    assert(r.mode === 'tally' && r.after === 'title', JSON.stringify(r));
+    assert(JSON.stringify(r) === JSON.stringify(['tally', 'play', 1, true, 'tally', 'ending', 'title']), JSON.stringify(r));
     assert(page.errors.length === 0, page.errors.join('\n'));
   }],
 ];

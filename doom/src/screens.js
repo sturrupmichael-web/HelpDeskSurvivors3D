@@ -23,7 +23,8 @@ function verdict({ kills, items, secrets, time, par }) {
 // The tally: kills, items and secrets count up one after another with a ticking sound,
 // then the time against par. Space (or a click) skips the counting, then continues.
 export class Tally {
-  constructor(game) {
+  constructor(game, next = null) {
+    this.next = next ? next.replace(/^E\dM\d:\s*/, '').toUpperCase() : null;
     const s = game.stats;
     const level = game.level;
     this.title = level.name.replace(/^E\dM\d:\s*/, '').toUpperCase();
@@ -102,6 +103,7 @@ export class Tally {
     }
     if (this.done) {
       drawText(ctx, this.line.toUpperCase(), cx, ty + 46, P.g, 1, 'center', P.k);
+      if (this.next) drawText(ctx, `NEXT: ${this.next}`, cx, h - 26, P.y, 1, 'center', P.k);
       if (Math.floor(this.t * 2) % 2) drawText(ctx, 'PRESS SPACE TO CONTINUE', cx, h - 14, P.w, 1, 'center', P.k);
     }
   }
@@ -117,4 +119,47 @@ export function drawDeath(ctx, w, h, t, viewH) {
   drawText(ctx, 'YOU BURNED OUT', cx, y, RED, 2, 'center', P.k);
   drawText(ctx, 'THE TICKETS WILL STILL BE HERE TOMORROW.', cx, y + 22, P.g, 1, 'center', P.k);
   if (Math.floor(t * 2) % 2) drawText(ctx, 'PRESS SPACE TO CLOCK BACK IN', cx, y + 36, P.w, 1, 'center', P.k);
+}
+
+// The end of the episode: DOOM's text screen, typed out a letter at a time over a dark
+// background. Space finishes the typing, then goes back to the title.
+export class Ending {
+  constructor(title, lines) {
+    this.title = title.toUpperCase();
+    this.lines = lines.map((l) => l.toUpperCase());
+    this.total = this.lines.reduce((n, l) => n + l.length, 0);
+    this.shown = 0;
+    this.t = 0;
+  }
+  get done() {
+    return this.shown >= this.total;
+  }
+  press() {
+    if (this.done) return true;
+    this.shown = this.total;
+    return false;
+  }
+  update(dt) {
+    this.t += dt;
+    const before = Math.floor(this.shown);
+    this.shown = Math.min(this.total, this.shown + dt * 28);
+    if (Math.floor(this.shown) > before && Math.floor(this.shown) % 3 === 0) play('tally');
+  }
+  draw(ctx, w, h) {
+    ctx.fillStyle = '#1a1c2c';
+    ctx.fillRect(0, 0, w, h);
+    // A few ticket-shaped lights in the dark, like the 3D game's floor.
+    ctx.fillStyle = '#29366f';
+    for (let i = 0; i < 12; i++) ctx.fillRect(((i * 97) % (w - 8)) + 2, ((i * 53) % (h - 6)) + 2, 4, 3);
+    const cx = Math.floor(w / 2);
+    drawText(ctx, this.title, cx, 10, P.y, 1, 'center', P.k);
+    let left = Math.floor(this.shown);
+    const x = Math.max(4, cx - 132);
+    this.lines.forEach((line, i) => {
+      if (left <= 0) return;
+      drawText(ctx, line.slice(0, left), x, 26 + i * 10, P.w, 1, 'left', P.k);
+      left -= line.length;
+    });
+    if (this.done && Math.floor(this.t * 2) % 2) drawText(ctx, 'PRESS SPACE', cx, h - 12, P.g, 1, 'center', P.k);
+  }
 }

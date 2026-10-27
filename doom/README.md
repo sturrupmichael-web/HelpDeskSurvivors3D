@@ -5,14 +5,18 @@ from the 3D game are the monsters, IT tools are the weapons, and access badges a
 keycards. Somewhere in the office there are server closets that everyone forgot about.
 
 It's a separate entry point inside this repo. It shares the 3D game's Three.js, models,
-icons, palette and loop, but has its own page, code and map:
+icons, palette and loop, but has its own page, code and maps.
+
+There are two levels so far, E1M1: The Help Desk and E1M2: Merger Day. You keep your
+health, armor, tools and ammo from one level to the next. After the last level, the
+episode's ending plays.
 
 ```
 doom/
   dev.html          the page for development (loads src/ as ES modules)
   index.html        the built page (npm run build), one self-contained file; not in git
-  maps/e1m1.json    the level, as data
-  data/             weapons, items, users (enemies) and skills, as plain tables
+  maps/             the levels, as data (e1m1.json, e1m2.json)
+  data/             weapons, items, users (enemies), skills and the episode, as plain tables
   src/              the game: level.js, geometry.js, renderer.js, game.js, enemies.js, ...
 ```
 
@@ -47,11 +51,11 @@ still runs.
 | Gamepad | Left stick moves, right stick looks, RT fires, A uses, Start pauses |
 
 The cheat codes are DOOM's: type `iddqd` for invulnerability, or `idkfa` for every tool,
-full ammo, armor and all three badges.
+full ammo, armor and all three badges. `idclev12` warps to E1M2 (`idclev11` back to E1M1).
 
-## Edit the map
+## Edit the maps
 
-The level is `maps/e1m1.json`. It has two grids of characters, each one character per
+Each level is a file in `maps/`, such as `maps/e1m1.json`. It has two grids of characters, each one character per
 2 x 2 metre cell:
 
 - `map` is the building. Each character is looked up in `tiles`.
@@ -86,11 +90,13 @@ Each thing type is one of these:
 Add `"minSkill": 4` to a thing to show it only on Ultra-Escalation and On-Call!.
 
 Textures are drawn in code in `src/textures.js`. To add one, add a function there and use
-its name in a tile. To load another map file, put it in `maps/` and open
-`dev.html?map=maps/yours.json`.
+its name in a tile. To try out a map file on its own, put it in `maps/` and open
+`dev.html?map=maps/yours.json`. To add it to the episode, put its name in the `maps` list
+in `data/episode.js`, which also holds the ending text.
 
-The tests check the map. `npm test` floods the level from the start, picks up badges in order, and fails if anything can't be reached: an item, a user,
-a secret or the exit.
+The tests check every map in the episode. `npm test` floods each level from the start and
+picks up badges in order. It fails if anything can't be reached: an item, a user, a
+secret or the exit.
 
 ## Tune the game
 

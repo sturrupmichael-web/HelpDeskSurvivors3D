@@ -416,13 +416,12 @@ export class Level {
 
 export const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-// Loads a map: the copy built into the page (index.html) if there is one, otherwise the
-// JSON file next to it. `?map=other.json` in the address loads another map file.
-export async function loadLevelData(name = 'e1m1') {
-  const custom = new URLSearchParams(location.search).get('map');
-  if (!custom && globalThis.__DOOM_MAPS__?.[name]) return globalThis.__DOOM_MAPS__[name];
-  const url = custom ?? `maps/${name}.json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Couldn't load the map ${url} (${res.status})`);
+// Loads a map by name: the copy built into the page (index.html) if there is one,
+// otherwise doom/maps/<name>.json. Or pass a `url` to load any map file.
+export async function loadLevelData(name = 'e1m1', url = null) {
+  if (!url && globalThis.__DOOM_MAPS__?.[name]) return globalThis.__DOOM_MAPS__[name];
+  const src = url ?? `maps/${name}.json`;
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`Couldn't load the map ${src} (${res.status})`);
   return res.json();
 }

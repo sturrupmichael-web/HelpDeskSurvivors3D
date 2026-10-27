@@ -43,7 +43,7 @@ const PRESS = {
 };
 
 // DOOM's cheat codes, typed during play: invulnerability, and every tool, full ammo,
-// full armor and all three badges.
+// full armor and all three badges. (idclev, for warping to a level, is below.)
 const CHEATS = ['iddqd', 'idkfa'];
 
 // Gamepad (standard mapping): buttons that press actions.
@@ -76,13 +76,19 @@ export class Input {
         const a = PRESS[e.code];
         if (a) this.queue.push(a);
         this.queue.push('anyKey');
-        if (e.code.startsWith('Key')) {
-          this.typed = (this.typed + e.code.slice(3).toLowerCase()).slice(-8);
+        if (e.code.startsWith('Key') || e.code.startsWith('Digit')) {
+          this.typed = (this.typed + e.code.replace(/^(Key|Digit)/, '').toLowerCase()).slice(-8);
           for (const c of CHEATS) {
             if (this.typed.endsWith(c)) {
               this.queue.push(`cheat:${c}`);
               this.typed = '';
             }
+          }
+          // idclev + episode and map digits: warp to a level (idclev12 is E1M2).
+          const warp = this.typed.match(/idclev(\d)(\d)$/);
+          if (warp) {
+            this.queue.push(`cheat:idclev:${warp[1]}${warp[2]}`);
+            this.typed = '';
           }
         }
       }

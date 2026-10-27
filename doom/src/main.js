@@ -1,6 +1,6 @@
 // Helpdesk Survivors: Doom Mode. Boots the game and runs its screens: the title (with the
-// level slowly turning behind it), play, pause, the automap, the tally after the exit,
-// and burning out. Everything runs on the fixed-timestep loop shared with the 3D game
+// level slowly turning behind it), play, pause, the automap, the tally after each level,
+// burning out, and the episode's ending. Everything runs on the fixed-timestep loop shared with the 3D game
 // (src/engine/loop.js).
 
 import { startLoop, STEP } from '../../src/engine/loop.js';
@@ -9,7 +9,8 @@ import { Renderer, LightEffects, DETAIL } from './renderer.js';
 import { Input } from './input.js';
 import { Hud, BAR_H } from './hud.js';
 import { Game } from './game.js';
-import { Tally, drawDeath } from './screens.js';
+import { Tally, Ending, drawDeath } from './screens.js';
+import { EPISODE } from '../data/episode.js';
 import { Menus, options } from './menus.js';
 import { Automap } from './automap.js';
 import { startMusic } from './music.js';
@@ -22,12 +23,17 @@ const input = new Input(hudCanvas);
 const hud = new Hud(hudCanvas);
 const lights = new LightEffects();
 
-const mapData = await loadLevelData('e1m1');
+// The episode's maps, or just the one in ?map=file.json when trying out a map.
+const custom = new URLSearchParams(location.search).get('map');
+const maps = custom ? [await loadLevelData('custom', custom)] : await Promise.all(EPISODE.maps.map((m) => loadLevelData(m)));
+let mapIndex = 0;
+let carryIn = null; // what you walked into this level with (restarts start from it)
 let level;
 let game;
 let automap;
-let mode = 'title'; // title | play | paused | tally
+let mode = 'title'; // title | play | paused | tally | ending
 let tally = null;
+let ending = null;
 let exitT = 0;
 let deadT = 0;
 let clicked = false;
@@ -49,15 +55,16 @@ function applyOptions() {
 }
 applyOptions();
 
-// Builds the level from scratch: a new shift, a restart, or the title's backdrop.
-function newGame(s) {
+// Builds a level from scratch: a new shift, the next level, a restart, or the title's
+// backdrop.
+function newGame(s, index = 0, carry = null) {
   for (const scene of [renderer.scene, renderer.viewScene]) {
     scene.traverse((o) => o.geometry?.dispose());
     scene.clear();
   }
   hud.messages = [];
-  level = new Level(mapData);
-  game = new Game({ level, renderer, hud, skill: s });
+  level = new Level(maps[index]);
+  game = new Game({ level, renderer, hud, skill: s, carry });
   automap = new Automap(level);
   tally = null;
   exitT = 0;
@@ -68,9 +75,11 @@ function newGame(s) {
 // The title: the bullpen, slowly turning, behind the menu.
 function toTitle() {
   newGame(3);
-  game.player.x = 21;
-  game.player.z = 50;
-  game.player.feet = level.floorAt(21, 50);
+  if (!custom) {
+    game.player.x = 21;
+    game.player.z = 50;
+    game.player.feet = level.floorAt(21, 50);
+  }
   mode = 'title';
   renderer.setBar(false);
   menus.show('title');
@@ -79,7 +88,13 @@ function toTitle() {
 
 function startShift(s) {
   skill = s;
-  newGame(skill);
+  playLevel(0, null);
+}
+
+function playLevel(index, carry) {
+  mapIndex = index;
+  carryIn = carry;
+  newGame(skill, index, carry);
   mode = 'play';
   renderer.setBar(true);
   menus.close();
@@ -104,7 +119,7 @@ function act(action) {
   if (!action) return;
   if (action.startsWith('start:')) startShift(Number(action.slice(6)));
   else if (action === 'resume') resume();
-  else if (action === 'restart') startShift(skill);
+  else if (action === 'restart') playLevel(mapIndex, carryIn);
   else if (action === 'quit') toTitle();
   else if (action === 'leave') location.href = '../';
 }
@@ -143,6 +158,11 @@ function cheats(presses) {
       game.player.armorClass = 2;
       hud.message('Very happy ammo added (and every badge)');
     }
+    if (a.startsWith('cheat:idclev:')) {
+      const n = Number(a.slice(-1)) - 1;
+      if (a.slice(-2, -1) === '1' && maps[n]) playLevel(n, game.carry());
+      else hud.message('No such level');
+    }
   }
 }
 
@@ -162,7 +182,18 @@ function update(dt) {
   }
   if (mode === 'tally') {
     tally.update(dt);
-    if ((presses.includes('use') || presses.includes('confirm') || click) && tally.press()) toTitle();
+    if ((presses.includes('use') || presses.includes('confirm') || click) && tally.press()) {
+      if (maps[mapIndex + 1]) playLevel(mapIndex + 1, game.carry());
+      else {
+        mode = 'ending';
+        ending = new Ending(`Episode 1: ${EPISODE.name}`, EPISODE.ending);
+      }
+    }
+    return;
+  }
+  if (mode === 'ending') {
+    ending.update(dt);
+    if ((presses.includes('use') || presses.includes('confirm') || click) && ending.press()) toTitle();
     return;
   }
 
@@ -176,7 +207,7 @@ function update(dt) {
   }
   if (game.player.dead) {
     deadT += dt;
-    if (deadT > 1 && (presses.includes('use') || click)) return startShift(skill);
+    if (deadT > 1 && (presses.includes('use') || click)) return playLevel(mapIndex, carryIn);
   }
   game.update(dt, input, game.player.dead ? presses.filter((a) => a !== 'use') : presses);
   automap.update(dt, game.player);
@@ -185,7 +216,7 @@ function update(dt) {
     exitT += dt;
     if (exitT > 0.8) {
       mode = 'tally';
-      tally = new Tally(game);
+      tally = new Tally(game, maps[mapIndex + 1]?.name);
       input.unlock();
     }
   }
@@ -205,11 +236,11 @@ function render(dt) {
     menus.draw(ctx, hud.w, hud.h, dt);
     return;
   }
-  if (mode === 'tally') {
+  if (mode === 'tally' || mode === 'ending') {
     input.takeMouse();
     renderer.render();
     ctx.clearRect(0, 0, hud.w, hud.h);
-    tally.draw(ctx, hud.w, hud.h);
+    (mode === 'tally' ? tally : ending).draw(ctx, hud.w, hud.h);
     return;
   }
   if (mode === 'play' && !game.player.dead) game.player.look(input.takeMouse());
@@ -240,6 +271,11 @@ window.doom = {
   get tally() {
     return tally;
   },
+  get mapIndex() {
+    return mapIndex;
+  },
+  maps,
+  playLevel,
   menus,
   renderer,
   input,

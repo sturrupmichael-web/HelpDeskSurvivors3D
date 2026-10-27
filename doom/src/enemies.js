@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { ENEMIES, DECOR } from '../data/enemies.js';
 import { ENEMIES as BASE } from '../../data/enemies.js';
-import { USER_MODELS, createExecutiveModel, toonMaterial, box, cyl, ball, merge } from '../../src/render/models.js';
+import { USER_MODELS, createExecutiveModel, createTakeoverModel, createSubsidiaryModel, toonMaterial, box, cyl, ball, merge } from '../../src/render/models.js';
 import { Billboard, bake, viewIndex } from './sprites.js';
 import { STEP_HEIGHT, DIRS } from './level.js';
 import { play, voice } from './audio.js';
@@ -36,9 +36,13 @@ const MAX_DROP = 3; // the furthest users will drop off a ledge
 
 const sheets = new Map(); // type -> { live, dead }
 
+// The 3D game's bosses with moving parts: legs, and one set of arms per pose (walking,
+// attacking, and a third pose used here for pain).
+const BOSSES = { executive: createExecutiveModel, takeover: createTakeoverModel, subsidiary: createSubsidiaryModel };
+
 function modelFor(def) {
-  if (def.model.boss === 'executive') {
-    const m = createExecutiveModel();
+  if (def.model.boss) {
+    const m = BOSSES[def.model.boss]();
     return {
       root: m.root,
       pose(p) {
@@ -115,7 +119,7 @@ const PROPS = {
 export function sheetsFor(gl, type) {
   if (sheets.has(type)) return sheets.get(type);
   const def = ENEMIES[type] ?? DECOR[type];
-  const still = !!def.barrel || !!DECOR[type];
+  const still = !!def.barrel || !!def.crate || !!DECOR[type];
   const m = modelFor(def.model ? def : { model: { prop: def.prop } });
   const views = still ? 1 : 8;
   const pixels = def.boss ? 96 : 56;
@@ -153,8 +157,9 @@ export class Monster {
     this.name = def.name ?? BASE[def.from]?.name ?? type;
     this.particle = BASE[def.from]?.particle ?? ['#b13e53', '#f4f4f4'];
     if (def.barrel) this.particle = ['#4b4b52', '#ffcd75'];
-    this.monster = !def.barrel;
-    this.barrel = !!def.barrel;
+    this.monster = !def.barrel && !def.crate;
+    this.barrel = !!def.barrel || !!def.crate; // things, not people: no brain
+    this.enraged = false;
     this.counts = def.counts !== false && !summoned;
     this.x = x;
     this.z = z;
@@ -191,7 +196,7 @@ export class Monster {
     const s = sheetsFor(game.renderer.gl, type);
     this.sheet = s.live;
     this.deadSheet = s.dead;
-    this.height = Math.min(this.sheet.height * this.scale * 0.95, def.barrel ? 1.1 : 3.4);
+    this.height = Math.min(this.sheet.height * this.scale * 0.95, this.barrel ? 1.1 : 3.4);
     this.bb = new Billboard(this.sheet.texture, this.sheet.width * this.scale, this.sheet.height * this.scale);
     game.scene.add(this.bb.mesh);
   }
@@ -205,7 +210,7 @@ export class Monster {
   hurt(amount, source, game) {
     if (this.dead || amount <= 0) return;
     // Users don't hurt their own kind with what they throw (as in DOOM).
-    if (source?.monster && source.type === this.type && source !== this) return;
+    if (source?.monster && source !== this && (source.type === this.type || (this.def.pair && source.def.pair === this.def.pair))) return;
     this.hp -= amount;
     this.flash = 0.12;
     if (source && source !== this) this.lastAttacker = source;
@@ -215,7 +220,7 @@ export class Monster {
     }
     if (this.barrel) return;
     // Infighting: turn on whoever hurt you, unless it's your own kind.
-    if (source && source !== this && !source.dead && (source === game.player || (source.monster && source.type !== this.type))) {
+    if (source && source !== this && !source.dead && (source === game.player || source.monster)) {
       if (this.target !== source && (source !== game.player || this.state === 'idle' || this.target?.dead)) {
         this.target = source;
       }
@@ -224,7 +229,15 @@ export class Monster {
     // Boss phases.
     const phases = this.def.phases;
     if (phases && this.phase < phases.length && this.hp / this.def.hp <= phases[this.phase].at) {
-      game.hud.message(phases[this.phase].banner);
+      const ph = phases[this.phase];
+      game.hud.message(ph.banner);
+      if (ph.spawn) {
+        const m = game.spawnMonster(ph.spawn, this.x + Math.sin(this.facing + 1.6) * 2.5, this.z + Math.cos(this.facing + 1.6) * 2.5, { awake: true, summoned: true });
+        if (m) {
+          m.target = game.player;
+          game.particles.burst(m.x, m.feet + 1.5, m.z, m.particle, 20, 4);
+        }
+      }
       this.phase++;
       this.cool = 0;
       play('powerUp', this.x, this.z);
@@ -252,7 +265,25 @@ export class Monster {
       this.killer = killer;
       return;
     }
+    if (def.crate) {
+      // A moving box: splinters, and whatever was inside falls out.
+      game.particles.burst(this.x, this.feet + 0.4, this.z, ['#a0703c', '#5d3a1a', '#ffcd75'], 14, 3);
+      play('thud', this.x, this.z);
+      const loot = def.crate.loot;
+      game.addPickup(loot[Math.floor(Math.random() * loot.length)], this.x, this.z, { dropped: true });
+      this.removeSprite(game);
+      return;
+    }
     voice('death', def.voice, this.x, this.z);
+    // Pairs: the others nearby take it personally.
+    if (def.pair) {
+      for (const m of game.actors) {
+        if (m === this || m.dead || m.def?.pair !== def.pair || Math.hypot(m.x - this.x, m.z - this.z) > 20) continue;
+        m.enraged = true;
+        if (m.state === 'idle') m.wake(game, game.player);
+        voice('sight', m.def.voice, m.x, m.z);
+      }
+    }
     game.particles.burst(this.x, cy, this.z, this.particle, def.boss ? 40 : 14, def.boss ? 6 : 3);
     if (def.explode) this.blowUp(game, this);
     if (def.onDeath) {
@@ -306,7 +337,7 @@ export class Monster {
       return;
     }
     if (this.barrel) return;
-    this.cool -= dt;
+    this.cool -= dt * (this.enraged ? 1.6 : 1);
     this.meleeCool -= dt;
     this.chargeCool -= dt;
     this.summonCool -= dt;
@@ -335,6 +366,8 @@ export class Monster {
         break;
     }
     if (this.def.aura) this.spreadAura(game);
+    const tg = this.def.tailgate;
+    if (tg && Math.hypot(game.player.x - this.x, game.player.z - this.z) < tg.radius) game.tailgate = { t: 0.2, slow: tg.slow };
     this.fall(dt, game);
   }
 
@@ -377,6 +410,7 @@ export class Monster {
     let s = this.def.speed;
     if (this.skillFast) s *= 1.35;
     if (this.auraT > 0) s *= this.auraMul;
+    if (this.enraged) s *= 1.5;
     return s;
   }
 
