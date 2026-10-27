@@ -8,13 +8,13 @@
 -- themselves rather than \u escapes, and pasting it into the SQL Editor dropped some, which
 -- left a range like "x-" with its ends in the wrong order. Postgres only compiles the
 -- pattern when a name is checked, so it was saved without complaint and has failed on
--- every name since. This puts back the same check written in plain ASCII, so nothing can
--- be lost in the paste.
+-- every name since. This puts back the same check written in plain ASCII (spaces
+-- in patterns as \x20 too), so nothing can be lost or changed in the paste.
 
 alter table public.players drop constraint if exists players_name_clean;
 alter table public.players add constraint players_name_clean check (
   name = btrim(name)
-  and name !~ '  '
+  and name !~ '\x20\x20' -- two spaces in a row
   and name !~ '[\u0001-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180e\u200b-\u200f\u2028-\u202f\u205f-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0]'
 ) not valid;
 
