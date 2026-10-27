@@ -455,7 +455,6 @@ export class Game {
       pl.health = 0;
       pl.dead = true;
       play('death');
-      this.hud.message('YOU BURNED OUT.');
     } else play(kind === 'hazard' ? 'sizzle' : 'pain');
     if (source?.monster) source.lastHitPlayer = this.time;
   }
