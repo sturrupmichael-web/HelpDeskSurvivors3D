@@ -107,10 +107,13 @@ export const DECOR = {
   cooler: { prop: 'waterCooler', radius: 0.4, solid: true },
 };
 
+// Difficulty, DOOM's five skills renamed. `damage` scales what you take, `ammo` what
+// you pick up; map things with "minSkill" only appear from that skill up; `fast` users
+// move, throw and wind up quicker.
 export const SKILLS = [
-  { name: "I'm Too Junior for This", damage: 0.5, ammo: 2 },
-  { name: 'Hey, Not Too Many Tickets', damage: 1, ammo: 1 },
-  { name: 'Ticket Me Plenty', damage: 1, ammo: 1 },
-  { name: 'Ultra-Escalation', damage: 1, ammo: 1 },
-  { name: 'On-Call!', damage: 1, ammo: 2, fast: true },
+  { name: "I'm Too Junior for This", hint: 'Half damage, double ammo.', damage: 0.5, ammo: 2 },
+  { name: 'Hey, Not Too Many Tickets', hint: 'A gentler queue.', damage: 0.75, ammo: 1 },
+  { name: 'Ticket Me Plenty', hint: 'A normal day on the desk.', damage: 1, ammo: 1 },
+  { name: 'Ultra-Escalation', hint: 'More users, and worse ones.', damage: 1, ammo: 1 },
+  { name: 'On-Call!', hint: 'Everyone is fast and furious. Double ammo.', damage: 1, ammo: 2, fast: true },
 ];

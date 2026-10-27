@@ -53,10 +53,12 @@ export class Hud {
     this.keyFlashT = 1.2;
   }
 
-  // In-game frame: flashes over the view, messages, the bar.
-  draw(dt, game) {
+  // In-game frame: flashes over the view, messages, the bar. `overlay(ctx)`, if given,
+  // replaces the view (the automap).
+  draw(dt, game, overlay = null) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
+    if (overlay) overlay(ctx);
     this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
     const viewH = this.h - BAR_H;
     const pl = game.player;
@@ -68,12 +70,12 @@ export class Hud {
     else if (game.flash.bonus > 0) tint = [255, 205, 117, game.flash.bonus * 0.5];
     if (game.power.invulnerable > 0 && (game.power.invulnerable > 3 || Math.floor(game.power.invulnerable * 4) % 2)) tint = [190, 220, 255, 0.28];
     if (pl.dead) tint = [120, 0, 0, 0.35];
-    if (tint) {
+    if (tint && !overlay) {
       ctx.fillStyle = `rgba(${tint[0]},${tint[1]},${tint[2]},${tint[3]})`;
       ctx.fillRect(0, 0, this.w, viewH);
     }
 
-    if (this.crosshair && !pl.dead) {
+    if (this.crosshair && !pl.dead && !overlay) {
       const cx = Math.floor(this.w / 2);
       const cy = Math.floor(viewH / 2);
       ctx.fillStyle = 'rgba(244,244,244,0.55)';

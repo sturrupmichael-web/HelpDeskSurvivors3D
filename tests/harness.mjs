@@ -40,7 +40,7 @@ export async function withPage(file, fn, viewport = { width: 1280, height: 720 }
     page.on('console', (m) => m.type() === 'error' && page.errors.push(m.text()));
     page.on('pageerror', (e) => page.errors.push(e.message));
     await page.goto(`http://${host}:${server.address().port}/${path}`);
-    await page.waitForFunction(() => window.sim && !document.getElementById('boot'), null, { timeout: 15000 });
+    await page.waitForFunction(() => (window.sim || window.doom) && !document.getElementById('boot'), null, { timeout: 30000 });
     await fn(page);
   } finally {
     await browser.close();

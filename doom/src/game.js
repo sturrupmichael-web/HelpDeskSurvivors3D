@@ -168,7 +168,7 @@ export class Game {
       }
     }
     if (def.ammo) {
-      for (const [k, n] of Object.entries(def.ammo)) if (this.arsenal.giveAmmo(k, n * (this.skill === 1 || this.skill === 5 ? 2 : 1))) used = true;
+      for (const [k, n] of Object.entries(def.ammo)) if (this.arsenal.giveAmmo(k, n * this.skillDef.ammo)) used = true;
     }
     if (def.weapon) {
       if (this.arsenal.giveWeapon(def.weapon)) {
@@ -431,7 +431,7 @@ export class Game {
     const pl = this.player;
     if (pl.dead || this.god || amount <= 0) return;
     if (this.power.invulnerable > 0 && kind !== 'telefrag') return;
-    if (this.skill === 1) amount /= 2; // the easiest skill halves damage, as DOOM's does
+    amount *= this.skillDef.damage; // the easy skills take less damage, as DOOM's does
     let dmg = amount;
     if (pl.armor > 0) {
       let saved = pl.armorClass === 2 ? dmg / 2 : dmg / 3;

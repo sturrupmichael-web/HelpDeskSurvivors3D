@@ -25,8 +25,8 @@ const PRESS = {
   KeyN: 'mute',
   Enter: 'confirm',
   Backspace: 'back',
-  KeyY: 'yes',
-  KeyU: 'up',
+  Minus: 'zoomOut',
+  Equal: 'zoomIn',
   ArrowUp: 'up',
   ArrowDown: 'down',
   ArrowLeft: 'leftMenu',
@@ -40,11 +40,11 @@ const PRESS = {
   Digit5: 'weapon5',
   Digit6: 'weapon6',
   Digit7: 'weapon7',
-  KeyG: 'god', // playtest helpers, only where they're switched on (see main.js)
-  KeyK: 'keys',
-  KeyI: 'idkfa',
-  KeyO: 'nextMap',
 };
+
+// DOOM's cheat codes, typed during play: invulnerability, and every tool, full ammo,
+// full armor and all three badges.
+const CHEATS = ['iddqd', 'idkfa'];
 
 // Gamepad (standard mapping): buttons that press actions.
 const PAD_PRESS = { 0: 'use', 1: 'back', 2: 'map', 3: 'nextWeapon', 4: 'prevWeapon', 5: 'nextWeapon', 9: 'pause', 12: 'up', 13: 'down', 14: 'leftMenu', 15: 'rightMenu' };
@@ -65,6 +65,7 @@ export class Input {
     this.pad = { lx: 0, ly: 0, rx: 0, ry: 0, fire: false, run: false, prev: [] };
     this.padConnected = false;
     this.lastKey = null; // for "press any key"
+    this.typed = '';
 
     addEventListener('keydown', (e) => {
       if (e.code === 'Tab' || e.code === 'Space' || e.code.startsWith('Arrow') || (e.code === 'Backspace' && e.target === document.body)) e.preventDefault();
@@ -75,6 +76,15 @@ export class Input {
         const a = PRESS[e.code];
         if (a) this.queue.push(a);
         this.queue.push('anyKey');
+        if (e.code.startsWith('Key')) {
+          this.typed = (this.typed + e.code.slice(3).toLowerCase()).slice(-8);
+          for (const c of CHEATS) {
+            if (this.typed.endsWith(c)) {
+              this.queue.push(`cheat:${c}`);
+              this.typed = '';
+            }
+          }
+        }
       }
     });
     addEventListener('keyup', (e) => this.down.delete(e.code));

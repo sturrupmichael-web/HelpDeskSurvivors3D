@@ -13,6 +13,13 @@ Plain ES modules with one runtime dependency (Three.js). The published page is a
 `index.html`; the online leaderboard, accounts and cloud saves talk to the 2D game's Supabase
 project, with tables of the 3D game's own (`supabase/`).
 
+## Doom Mode
+
+`doom/` is a separate entry point: Helpdesk Survivors as a 1993-style first-person shooter.
+It reuses this game's models, icons and palette, and is served at
+<https://michaelsturrup.com/HelpDeskSurvivors3D/doom/>. See [doom/README.md](doom/README.md)
+for running it, editing its map and putting it on a subdomain.
+
 ## Run it
 
 ```sh
