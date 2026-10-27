@@ -38,6 +38,8 @@ export class Player {
     this.keys = new Set();
     this.dead = false;
     this.slow = 1; // hazard slow-down (coffee is sticky)
+    this.radius = RADIUS;
+    this.height = HEIGHT;
   }
 
   get eye() {

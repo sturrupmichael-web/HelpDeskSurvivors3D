@@ -20,11 +20,13 @@ class Bucket {
     this.col = [];
   }
   // A quad from four corners given counter-clockwise as seen from the front.
+  // `light` is one brightness, or four (one per corner) for shading into corners.
   quad(p, uv, light) {
     for (const k of [0, 1, 2, 0, 2, 3]) {
+      const l = typeof light === 'number' ? light : light[k];
       this.pos.push(p[k][0], p[k][1], p[k][2]);
       this.uv.push(uv[k][0], uv[k][1]);
-      this.col.push(light, light, light);
+      this.col.push(l, l, l);
     }
   }
   geometry() {
@@ -73,8 +75,19 @@ export class LevelMeshes {
         const z1 = z0 + S;
 
         // Floor (a lift's floor is the top of its box) and ceiling.
+        // Corners next to walls (or tall furniture) are darker: cheap ambient occlusion
+        // for DOOM's gloomy corners.
+        const shadeAt = (cc, rr) => {
+          let n = 0;
+          for (const [a, b] of [[cc - 1, rr - 1], [cc, rr - 1], [cc - 1, rr], [cc, rr]]) {
+            const o = level.cell(a, b);
+            if (!o || o.kind === 'wall' || o.floor > fl + 1) n++;
+          }
+          return L * (1 - 0.16 * n);
+        };
         if (cell.kind !== 'lift') {
-          bucket(cell.floorTex, fx).quad([[x0, fl, z1], [x1, fl, z1], [x1, fl, z0], [x0, fl, z0]], flatUV(x0, z0, x1, z1, true), L);
+          const ao = [shadeAt(c, r + 1), shadeAt(c + 1, r + 1), shadeAt(c + 1, r), shadeAt(c, r)];
+          bucket(cell.floorTex, fx).quad([[x0, fl, z1], [x1, fl, z1], [x1, fl, z0], [x0, fl, z0]], flatUV(x0, z0, x1, z1, true), ao);
         }
         let ceilTex = cell.kind === 'door' ? 'DOORTOP' : cell.ceilTex;
         if (cell.def?.lights && c % LIGHT_EVERY === 1 && r % LIGHT_EVERY === 1) ceilTex = 'LIGHTPANEL';
@@ -214,7 +227,9 @@ function wallQuad(b, ex, ez, nx, nz, S, y0, y1, fromTop, light) {
   const vt = fromTop ? 1 : (y1 - y0) / 4;
   const v0 = fromTop ? vb : y0 / 4 - Math.floor(y0 / 4);
   const v1 = fromTop ? vt : v0 + (y1 - y0) / 4;
-  b.quad([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], [[ua, v0], [ub, v0], [ub, v1], [ua, v1]], light);
+  // Walls darken a little towards the floor.
+  const low = light * (y1 - y0 > 1.2 ? 0.78 : 0.9);
+  b.quad([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], [[ua, v0], [ub, v0], [ub, v1], [ua, v1]], [low, low, light, light]);
 }
 
 // The four outward sides of a cell-sized box from y0 to y1, plus its bottom (with

@@ -110,3 +110,43 @@ export function wrapText(text, maxWidth, scale = 1) {
   if (line) lines.push(line);
   return lines;
 }
+
+// A tiny 3x5 font for the status bar's ammo table (digits, '/', and the capitals used).
+const TINY = {
+  0: '###' + '# #' + '# #' + '# #' + '###',
+  1: ' # ' + '## ' + ' # ' + ' # ' + '###',
+  2: '###' + '  #' + '###' + '#  ' + '###',
+  3: '###' + '  #' + ' ##' + '  #' + '###',
+  4: '# #' + '# #' + '###' + '  #' + '  #',
+  5: '###' + '#  ' + '###' + '  #' + '###',
+  6: '###' + '#  ' + '###' + '# #' + '###',
+  7: '###' + '  #' + ' # ' + ' # ' + ' # ',
+  8: '###' + '# #' + '###' + '# #' + '###',
+  9: '###' + '# #' + '###' + '  #' + '###',
+  '/': '  #' + '  #' + ' # ' + '#  ' + '#  ',
+  ' ': '               ',
+  A: ' # ' + '# #' + '###' + '# #' + '# #',
+  C: ' ##' + '#  ' + '#  ' + '#  ' + ' ##',
+  D: '## ' + '# #' + '# #' + '# #' + '## ',
+  I: '###' + ' # ' + ' # ' + ' # ' + '###',
+  L: '#  ' + '#  ' + '#  ' + '#  ' + '###',
+  M: '# #' + '###' + '###' + '# #' + '# #',
+  P: '###' + '# #' + '###' + '#  ' + '#  ',
+  R: '## ' + '# #' + '## ' + '# #' + '# #',
+  S: ' ##' + '#  ' + ' # ' + '  #' + '## ',
+  T: '###' + ' # ' + ' # ' + ' # ' + ' # ',
+  W: '# #' + '# #' + '###' + '###' + '# #',
+  X: '# #' + '# #' + ' # ' + '# #' + '# #',
+};
+
+export function drawTiny(ctx, text, x, y, color, align = 'left') {
+  text = String(text).toUpperCase();
+  const w = text.length * 4 - 1;
+  let px = Math.round(align === 'right' ? x - w : x);
+  ctx.fillStyle = color;
+  for (const ch of text) {
+    const g = TINY[ch] ?? TINY[' '];
+    for (let i = 0; i < 15; i++) if (g[i] === '#') ctx.fillRect(px + (i % 3), Math.round(y) + Math.floor(i / 3), 1, 1);
+    px += 4;
+  }
+}

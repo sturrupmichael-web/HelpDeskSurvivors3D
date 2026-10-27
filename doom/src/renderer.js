@@ -18,7 +18,7 @@ export class Renderer {
     this.gl.autoClear = false;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x000000);
-    this.fog = new THREE.Fog(0x000000, 8, 46);
+    this.fog = new THREE.Fog(0x000000, 5, 40);
     this.scene.fog = this.fog;
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.05, 160);
     this.camera.rotation.order = 'YXZ';
