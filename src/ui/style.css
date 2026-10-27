@@ -504,6 +504,7 @@ kbd {
 .board-clean.on .switch::after { left: auto; right: 2px; background: var(--yellow); }
 .board-body { min-height: 120px; }
 .board-msg { color: var(--grey); font-size: 13px; }
+.board-retry { display: block; margin: 8px auto 0; }
 .board-note { color: var(--grey); font-size: 13px; text-align: center; margin: 14px 0 0; }
 .board-table { width: 100%; margin: 0 auto; }
 .board-table tr.head td { color: var(--grey); border-bottom: 1px dashed var(--slate); }

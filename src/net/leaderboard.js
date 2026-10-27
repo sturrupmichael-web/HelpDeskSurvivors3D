@@ -46,7 +46,8 @@ const filterQ = (filter) => (filter === 'clean' || filter === true ? '&mods=eq.'
 // Top scores on one map: [{ name, character, seconds, csat, won, mods, mult, score }].
 export async function topScores(map, filter = '') {
   const q = `?select=name,character,seconds,csat,won,mods,mult,score&map=eq.${encodeURIComponent(map)}${filterQ(filter)}&order=score.desc,seconds.desc&limit=${LB.top}`;
-  const r = await call(q);
+  let r = await call(q);
+  if (!r.ok && !r.status) r = await call(q); // no answer: one more try (a slow phone signal)
   if (!r.ok) return r;
   return { ok: true, rows: await r.res.json() };
 }
@@ -68,7 +69,7 @@ export async function myRank(map, name, filter = '') {
 // (1 = top). The database fills in the player's name from their account.
 export async function postScore(row) {
   const r = await account.rest(LB.table, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) });
-  if (!r.ok) return r;
+  if (!r.ok) return { ok: false, status: r.status, reason: String(r.body?.message ?? '').slice(0, 160) };
   const score = Math.round(row.csat * (row.mult ?? 1));
   const c = await call(`?select=id&map=eq.${encodeURIComponent(row.map)}&score=gt.${score}`, {
     method: 'HEAD',
