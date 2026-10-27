@@ -7,6 +7,7 @@ leaderboard, cloud saves and profiles. Settings are in `data/leaderboard.js`.
 | File | What it does |
 | --- | --- |
 | `001_3d.sql` | `scores_3d` (the 3D leaderboard, with every check the 2D `scores` has), `saves_3d` (one private cloud save per account), `player_profile_3d()` (public profiles), and a trigger so a rename renames 3D scores too. Leaves every 2D table and function as it is. |
+| `002_name_check_fix.sql` | Fixes the name check on `players` (shared with the 2D game) that refused every new name with "invalid regular expression: invalid character range". Same rule, written in plain ASCII. |
 
 To run one: Supabase, SQL Editor, New query, paste the whole file, Run. It's safe to run
 again.
