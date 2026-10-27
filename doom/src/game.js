@@ -12,6 +12,8 @@ import { Billboard, iconTexture, bake } from './sprites.js';
 import { ITEMS } from '../data/items.js';
 import { WEAPONS } from '../data/weapons.js';
 import { play, setListener } from './audio.js';
+import { Monster, Decor, buildFlow, soundFlood, FLOW_EVERY } from './enemies.js';
+import { ENEMIES, DECOR, SKILLS } from '../data/enemies.js';
 
 const PICKUP_REACH = 1.0;
 const HAZARD_TICK = 0.9; // seconds between hazard hurts, like DOOM's nukage
@@ -25,6 +27,7 @@ export class Game {
     this.hud = hud;
     this.face = hud.face;
     this.skill = skill;
+    this.skillDef = SKILLS[skill - 1] ?? SKILLS[2];
     this.scene = renderer.scene;
     this.meshes = new LevelMeshes(level);
     this.scene.add(this.meshes.group);
@@ -48,10 +51,41 @@ export class Game {
     this.weaponSprites = {};
     this.lightLevels = { none: 1 };
 
+    this.flow = new Int16Array(level.cells.length).fill(-1);
+    this.flowT = 0;
+    this.heard = new Uint8Array(level.cells.length);
+    this.noiseId = 0;
+    this.lastNoise = null;
+
     for (const t of level.things) {
       if (t.item) this.addPickup(t.item, t.x, t.z, t);
+      if (t.minSkill && this.skill < t.minSkill) continue;
+      if (t.monster) {
+        if (!ENEMIES[t.monster]) console.warn(`Map: unknown user "${t.monster}"`);
+        else this.spawnMonster(t.monster, t.x, t.z, { facing: t.angle !== undefined ? Math.PI - (t.angle * Math.PI) / 180 : undefined, force: true });
+      }
+      if (t.decor) {
+        if (!DECOR[t.decor]) console.warn(`Map: unknown decoration "${t.decor}"`);
+        else this.actors.push(new Decor(this, t.decor, t.x, t.z));
+      }
     }
     this.stats.totalItems = this.pickups.filter((p) => p.def.counts).length;
+    this.stats.totalKills = this.actors.filter((a) => a.counts).length;
+    buildFlow(level, this.player.x, this.player.z, this.flow);
+  }
+
+  // Adds a user (or a UPS battery) at (x, z), if there's room. Returns it or null.
+  spawnMonster(type, x, z, { force = false, ...opts } = {}) {
+    const r = ENEMIES[type].radius;
+    if (!force) {
+      const s = this.level.span(x, z, r);
+      if (!s || s.ceil - s.floor < 1.5 || this.blocked(x, z, r, null)) return null;
+    }
+    const opt = { ...opts };
+    if (opt.facing === undefined) delete opt.facing;
+    const m = new Monster(this, type, x, z, opt);
+    this.actors.push(m);
+    return m;
   }
 
   // --- Pickups -----------------------------------------------------------------------------
@@ -224,8 +258,9 @@ export class Game {
     let best = null;
     const a2 = d.x * d.x + d.z * d.z;
     if (a2 < 1e-9) return null;
-    for (const a of this.actors) {
-      if (a === source || !a.shootable || a.dead) continue;
+    const pl = this.player;
+    for (const a of source === pl ? this.actors : [...this.actors, pl]) {
+      if (a === source || a.dead || (a !== pl && !a.shootable)) continue;
       const ox = o.x - a.x;
       const oz = o.z - a.z;
       const b = 2 * (d.x * ox + d.z * oz);
@@ -267,6 +302,11 @@ export class Game {
   }
 
   damageActor(actor, damage, source, at) {
+    if (actor === this.player) {
+      this.damagePlayer(damage, source);
+      if (at) this.particles.burst(at.x, at.y, at.z, ['#b13e53', '#7a1c2c'], 4, 2);
+      return;
+    }
     if (at) this.particles.burst(at.x, at.y, at.z, actor.particle ?? ['#b13e53'], 6, 2.5);
     actor.hurt(Math.round(damage), source, this);
   }
@@ -429,6 +469,7 @@ export class Game {
       if (Math.abs(a.x - x) < rr && Math.abs(a.z - z) < rr) {
         if ((a.x - x) ** 2 + (a.z - z) ** 2 < rr * rr) {
           // Already overlapping: allow moving apart.
+          if (!self) return true;
           const now = (a.x - self.x) ** 2 + (a.z - self.z) ** 2;
           const next = (a.x - x) ** 2 + (a.z - z) ** 2;
           if (next < now || now >= rr * rr) return true;
@@ -461,7 +502,12 @@ export class Game {
     }
     this.meshes.sync();
 
-    for (const a of this.actors) if (!a.removed) a.update?.(dt, this);
+    this.flowT -= dt;
+    if (this.flowT <= 0) {
+      this.flowT = FLOW_EVERY;
+      buildFlow(this.level, pl.x, pl.z, this.flow);
+    }
+    for (let i = 0; i < this.actors.length; i++) if (!this.actors[i].removed) this.actors[i].update?.(dt, this);
     this.updateProjectiles(dt);
     this.touchPickups();
     this.hazards(dt);
@@ -537,8 +583,18 @@ export class Game {
     }
   }
 
+  // A weapon went off: users in connected rooms within `cells` cells hear it.
   noise(cells) {
-    this.lastNoise = { x: this.player.x, z: this.player.z, cells, time: this.time };
+    const pl = this.player;
+    soundFlood(this.level, pl.x, pl.z, cells, this.heard);
+    this.lastNoise = { id: ++this.noiseId, x: pl.x, z: pl.z, cells, time: this.time };
+  }
+
+  heardAt(x, z) {
+    const L = this.level;
+    const c = L.col(x);
+    const r = L.col(z);
+    return L.inside(c, r) && this.heard[L.idx(c, r)] === 1;
   }
 
   muzzleFlash(amount = 0.25) {
