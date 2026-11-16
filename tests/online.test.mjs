@@ -173,7 +173,10 @@ export const tests = [
   }],
   ['signed out, a refused guest sign-up says why instead of "Couldn\'t reach"', async (page) => {
     // Sign out on this device, then finish a shift as a new player.
-    await page.evaluate(() => localStorage.removeItem('helpdesk-survivors-3d.auth.v1'));
+    await page.evaluate(() => {
+      localStorage.removeItem('helpdesk-survivors-3d.auth.v1');
+      localStorage.removeItem('michaelsturrup.auth.v1');
+    });
     await page.reload();
     await page.waitForFunction(() => window.sim && !document.getElementById('boot'), null, { timeout: 15000 });
     await page.waitForSelector('.panel.title');
@@ -193,6 +196,30 @@ export const tests = [
     assert(msg.includes('Anonymous sign-ins are disabled') && !/Couldn't reach/.test(msg), msg);
     fake.signupError = null;
     page.errors = page.errors.filter((e) => !/status of 422/.test(e));
+    assert(errors(page).length === 0, errors(page).join('\n'));
+  }],
+  ['signed in with Google on the main page: the game is too, and signing out here signs out there', async (page) => {
+    const pam = fake.players.find((p) => p.name === 'Pam');
+    const t = token(pam.user_id, { guest: false, email: 'pam@example.com' });
+    // What michaelsturrup.com's Sign in with Google leaves behind.
+    await page.evaluate((s) => localStorage.setItem('michaelsturrup.auth.v1', JSON.stringify(s)), {
+      access_token: t.access_token,
+      refresh_token: t.refresh_token,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: pam.user_id, email: 'pam@example.com', guest: false },
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.sim && !document.getElementById('boot'), null, { timeout: 15000 });
+    await page.waitForSelector('.panel.title');
+    await page.waitForFunction(() => /Google/.test(document.querySelector('.tile[data-act=account]').textContent));
+    await page.keyboard.press('KeyU');
+    await page.waitForSelector('.panel.account');
+    const acc = await page.textContent('.panel.account');
+    assert(acc.includes('pam@example.com') && acc.includes('Pam'), acc.slice(0, 300));
+    const out = await page.$('.panel.account [data-act=signout], .panel.account button:has-text("Sign out")');
+    assert(out, 'Sign out button');
+    await out.click();
+    await page.waitForFunction(() => localStorage.getItem('michaelsturrup.auth.v1') === null);
     assert(errors(page).length === 0, errors(page).join('\n'));
   }],
 ];
