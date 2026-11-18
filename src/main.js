@@ -1,6 +1,7 @@
 // Entry point: start input, the save, the simulation, the 3D view and the page UI, then
 // the loop. The game opens on the title screen, over the office floor.
 
+import { joinSiteLive } from './site-live.js';
 import { initInput, moveAxis, pollGamepad, onKeyPress, gamepadConnected, touchState } from './engine/input.js';
 import { startLoop } from './engine/loop.js';
 import { Sim } from './sim/game.js';
@@ -294,3 +295,5 @@ cloud.sync();
 // Offline play for the installed game (sw.js). Not from dev.html, which loads src/ directly.
 if ('serviceWorker' in navigator && !location.pathname.endsWith('dev.html')) navigator.serviceWorker.register('sw.js').catch(() => {});
 document.getElementById('boot')?.remove();
+
+joinSiteLive('helpdesk-survivors-3d'); // live "N playing" + visit counter on michaelsturrup.com
