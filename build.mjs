@@ -47,7 +47,7 @@ function withCsp(page) {
     `script-src 'self' ${hashes.join(' ')}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
-    `connect-src 'self' ${LEADERBOARD.url}`,
+    `connect-src 'self' ${LEADERBOARD.url} wss://abeqdmurddrkrqbnfylb.supabase.co`,
     "worker-src 'self'", // sw.js, for playing offline
     "manifest-src 'self'",
     "object-src 'none'",
